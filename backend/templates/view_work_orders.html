@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>View Work Orders</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>View Work Orders</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>Work Order Number</th>                                                                                  
+                    <th>Description</th>
+                    <th>Asset Number</th>
+                    <th>Work Order Type</th>
+                    <th>Priority</th>
+                    <th>Assigned To</th>
+                    <th>Date Created</th>
+                    <th>Date Needed</th>
+                    <th>Assigned Technician</th>  
+                    <th>Status</th>                
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="workOrdersTableBody">
+            </tbody>
+        </table>
+        <p><a href="/dashboard">Back to Dashboard</a></p>
+    </div>
+
+    <script>
+        function authFetch(url, options = {}) {
+            const token = localStorage.getItem('token');
+            const headers = options.headers || {};
+            return fetch(url, {
+                ...options,
+                headers: {
+                    ...headers,
+                    'Authorization': `Bearer ${token}`,
+                    ...(options.method === 'POST' || options.method === 'PUT' ? { 'Content-Type': 'application/json' } : {})
+                }
+            });
+        }
+
+        async function fetchWorkOrders() {
+            try {
+                const response = await authFetch('/api/work_orders');
+                const data = await response.json();
+
+                if (!response.ok) {
+                    console.error("Server responded with error:", data.error);
+                    alert("Server Error: " + (data.error || "Unknown error"));
+                    return;
+                }
+
+                const tbody = document.getElementById('workOrdersTableBody');
+                tbody.innerHTML = '';
+
+                if (data.work_orders && data.work_orders.length > 0) {
+                    data.work_orders.forEach(wo => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${wo.wo_number || 'N/A'}</td>
+                            <td>${wo.wo_description || 'N/A'}</td>
+                            <td>${wo.AssetNumber || 'N/A'}</td>
+                            <td>${wo.WO_Type || 'N/A'}</td>
+                            <td>${wo.WO_Priority || 'N/A'}</td>
+                            <td>${wo.AssignedToDept || 'N/A'}</td>
+                            <td>${wo.DateCreated ? new Date(wo.DateCreated).toLocaleString() : 'N/A'}</td>
+                            <td>${wo.dateneeded ? new Date(wo.dateneeded).toLocaleDateString() : 'N/A'}</td>
+                            <td>${wo.assigned_technician || 'Unassigned'}</td>   
+                            <td>${wo.Work_Order_Status || 'Unknown'}</td>        
+                            <td><button onclick="modifyWorkOrder('${wo.wo_number}')">Modify</button></td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="9">No work orders found.</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error fetching work orders:', error);
+                alert(`Failed to fetch work orders. Please try again. Error: ${error.message}`);
+            }
+        }
+
+        function modifyWorkOrder(wo_number) {
+            window.location.href = `/modify_work_orders/${encodeURIComponent(wo_number)}`;
+        }
+
+        window.onload = fetchWorkOrders;
+    </script>
+</body>
+</html>

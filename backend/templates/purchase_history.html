@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Purchase History</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+    <h1>Purchase History</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Part Name</th>
+                <th>Quantity Purchased</th>
+                <th>Purchase Date</th>
+            </tr>
+        </thead>
+        <tbody id="historyTableBody">
+            <!-- Populated by JS -->
+        </tbody>
+    </table>
+    <p><a href="/dashboard">Back to Dashboard</a></p>
+</div>
+
+<script>
+    async function fetchPurchaseHistory() {
+        try {
+            const response = await fetch("/api/purchase_history");
+            const data = await response.json();
+            const tbody = document.getElementById("historyTableBody");
+            tbody.innerHTML = "";
+
+            if (data.history && data.history.length > 0) {
+                data.history.forEach(entry => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                        <td>${entry.part_name}</td>
+                        <td>${entry.quantity_purchased}</td>
+                        <td>${entry.purchase_date}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } else {
+                tbody.innerHTML = "<tr><td colspan='3'>No purchase history found.</td></tr>";
+            }
+        } catch (error) {
+            console.error("Failed to load purchase history:", error);
+            alert("Error loading purchase history.");
+        }
+    }
+
+    window.onload = fetchPurchaseHistory;
+</script>
+</body>
+</html>

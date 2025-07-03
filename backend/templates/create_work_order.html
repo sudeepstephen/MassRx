@@ -1,0 +1,213 @@
+<script>
+function authFetch(url, options = {}) {
+    const token = localStorage.getItem('token');
+    const headers = {
+        ...(options.headers || {}),
+        'Authorization': `Bearer ${token}`,
+    };
+
+    // Add Content-Type only for POST/PUT if not already present
+    if ((options.method === 'POST' || options.method === 'PUT') &&
+        !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    return fetch(url, {
+        ...options,
+        headers
+    });
+}
+
+</script>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Create Work Order</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Create Work Order</h1>
+        <form id="workOrderForm">
+            <label for="assetNumber">Asset Number:</label>
+            <input type="text" id="assetNumber" name="assetNumber" value="" required><br><br>
+            
+            
+            <label for="facilityId">Facility ID:</label>
+            <select id="facilityId" name="facilityId" required>
+                <option value="">Select Facility</option>
+            </select><br><br>
+            
+            <label for="description">Work Order Description:</label>
+            <input type="text" id="description" name="description" required><br><br>
+
+            <label for="woDate">Date Needed:</label>
+            <input type="date" id="woDate" name="woDate" required><br><br>
+            
+            <label for="woType">Work Order Type:</label>
+            <select id="woType" name="woType" required>
+                <option value="">Select Type</option>
+            </select><br><br>
+            
+            <label for="woPriority">Priority:</label>
+            <select id="woPriority" name="woPriority" required>
+                <option value="">Select Priority</option>
+            </select><br><br>
+            
+            <label for="assignedToDept">Assigned To Department:</label>
+            <select id="assignedToDept" name="assignedToDept" required>
+                <option value="">Select Department</option>
+            </select><br><br>
+            
+            <label for="assignedTechnician">Assigned Technician (optional):</label>
+            <input type="text" id="assignedTechnician" name="assignedTechnician"><br><br>
+
+            <label for="Requester's Comments">Requester's Comments:</label>
+            <input type="text" id="Rqst_cmnt" name="Requester's Comments" required><br><br>
+            
+            <button type="submit">Create Work Order</button>
+        </form>
+        <p><a href="/dashboard">Back to Dashboard</a></p>
+    </div>
+    <script>
+        async function authFetchOptions() {
+            try {
+                const [facilities, types, priorities, depts] = await Promise.all([
+                    authFetch('/api/facilities').then(r => r.json()).then(d => d.facilities),
+                    authFetch('/api/work_order_types').then(r => r.json()).then(d => d.work_order_types),
+                    authFetch('/api/work_order_priorities').then(r => r.json()).then(d => d.work_order_priorities),
+                    authFetch('/api/departments').then(r => r.json()).then(d => d.departments)
+                ]);
+                populateSelect('facilityId', facilities.map(f => f.facility_id));
+                populateSelect('woType', types.map(t => ({ value: t.wo_type_cd, label: t.wo_type_cd_desc })));
+                populateSelect('woPriority', priorities.map(p => ({ value: p.wo_priority_cd, label: p.wo_priority_cd_desc })));
+                populateSelect('assignedToDept', depts.map(d => ({ value: d.dept_cd, label: d.dept_cd_desc })));
+            } catch (error) {
+                console.error('Error fetching options:', error);
+            }
+        }
+
+        function populateSelect(id, options) {
+            const select = document.getElementById(id);
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value || opt;
+                option.textContent = opt.label || opt;
+                select.appendChild(option);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', authFetchOptions);
+
+        document.getElementById('workOrderForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = {
+                tag_number: document.getElementById('assetNumber').value,
+                facility_id: document.getElementById('facilityId').value,
+                description: document.getElementById('description').value,
+                wo_type: document.getElementById('woType').value,
+                wo_priority: document.getElementById('woPriority').value,
+                assigned_to_dept: document.getElementById('assignedToDept').value,
+                dateneeded: document.getElementById('woDate').value,
+                requestercomments: document.getElementById('Rqst_cmnt').value,
+                assigned_technician: document.getElementById('assignedTechnician').value || null
+            };
+            try {
+                const response = await authFetch('/api/work_orders', {
+                    method: 'POST',
+                    body: JSON.stringify(formData)
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to create work order');
+                }
+                alert('Work order created successfully: ' + data.wo_number);
+
+                // ✅ Set today's date as the minimum selectable date
+            const today = new Date().toISOString().split('T')[0];
+            const woDateInput = document.getElementById("woDate");
+            woDateInput.min = today;
+           //woDateInput.value = today;
+            } catch (error) {
+                alert('Error: ' + error.message);
+                console.error('Error:', error);
+            }
+        });
+    </script>
+    <script>
+    const params = new URLSearchParams(window.location.search);
+    const assetNumber = params.get("tag_number"); // this matches the actual URL
+
+    if (assetNumber) {
+        document.getElementById("assetNumber").value = assetNumber;
+    }
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        const assetNumber = params.get("tag_number");
+        const facilityId = params.get("facility_id");
+
+        if (assetNumber) {
+            document.getElementById("assetNumber").value = assetNumber;
+        }
+
+        if (facilityId) {
+            const facilitySelect = document.getElementById("facilityId");
+
+            // Wait until options are populated
+            const waitForOptions = setInterval(() => {
+                const foundOption = Array.from(facilitySelect.options).find(opt => opt.value === facilityId);
+                if (foundOption) {
+                    facilitySelect.value = facilityId;
+                    clearInterval(waitForOptions);
+                }
+            }, 100);
+        }
+    });
+</script>
+
+
+
+</body>
+</html>

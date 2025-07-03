@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Facility Access Management</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ccc;
+            vertical-align: top;
+        }
+        .facility-chip {
+            display: inline-block;
+            background-color: #ecf0f1;
+            border: 1px solid #bdc3c7;
+            padding: 5px 10px;
+            border-radius: 12px;
+            margin: 2px;
+        }
+        .facility-chip button {
+            margin-left: 5px;
+            background: none;
+            border: none;
+            color: red;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .dropdown-container {
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Facility Access Management</h1>
+    <table id="accessTable">
+        <thead>
+            <tr>
+                <th>Manager Email</th>
+                <th>Assigned Facilities</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="managerRows">
+            <!-- Dynamic rows here -->
+        </tbody>
+    </table>
+    <p><a href="/dashboard">Back to Dashboard</a></p>
+</div>
+
+<script>
+// Helper fetch with Authorization
+function authFetch(url, options = {}) {
+    const token = localStorage.getItem('token');
+    const headers = {
+        ...(options.headers || {}),
+        'Authorization': `Bearer ${token}`,
+    };
+    if ((options.method === 'POST' || options.method === 'PUT') &&
+        !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+    }
+    return fetch(url, {
+        ...options,
+        headers
+    });
+}
+
+// Load data
+async function loadData() {
+    try {
+        const [managersRes, facilitiesRes] = await Promise.all([
+            authFetch('/api/managers').then(r => r.json()),
+            authFetch('/api/facilities').then(r => r.json())
+        ]);
+
+        const allFacilities = facilitiesRes.facilities.map(f => f.facility_id);
+        const tableBody = document.getElementById("managerRows");
+        tableBody.innerHTML = "";
+
+        for (let mgr of managersRes.managers) {
+            const row = document.createElement("tr");
+
+            // Email cell
+            const emailCell = document.createElement("td");
+            emailCell.textContent = mgr.email;
+            row.appendChild(emailCell);
+
+            // Facilities cell
+            const facilitiesCell = document.createElement("td");
+            facilitiesCell.id = `facilities-${mgr.email}`;
+
+            const assignedFacilities = mgr.facilities || [];
+
+            if (assignedFacilities.length) {
+                assignedFacilities.forEach(fac => {
+                    const chip = createFacilityChip(mgr.email, fac);
+                    facilitiesCell.appendChild(chip);
+                });
+            } else {
+                facilitiesCell.textContent = "None";
+            }
+
+            row.appendChild(facilitiesCell);
+
+            // Action cell
+            const actionCell = document.createElement("td");
+            const dropdown = document.createElement("select");
+            dropdown.innerHTML = `<option value="">--Select Facility--</option>`;
+
+            const assignedSet = new Set(assignedFacilities);
+            for (let fac of allFacilities) {
+                if (!assignedSet.has(fac)) {
+                    dropdown.innerHTML += `<option value="${fac}">${fac}</option>`;
+                }
+            }
+
+            const addBtn = document.createElement("button");
+            addBtn.textContent = "Add Facility";
+            addBtn.onclick = async () => {
+                const selected = dropdown.value;
+                if (!selected) {
+                    alert("Please select a facility.");
+                    return;
+                }
+                const res = await authFetch('/api/assign_facility', {
+                    method: 'POST',
+                    body: JSON.stringify({ email: mgr.email, facility_id: selected })
+                });
+                const result = await res.json();
+                if (res.ok) {
+                    alert(result.message);
+
+                    // Update UI
+                    if (facilitiesCell.textContent === "None") {
+                        facilitiesCell.textContent = "";
+                    }
+                    facilitiesCell.appendChild(createFacilityChip(mgr.email, selected));
+                    dropdown.querySelector(`option[value="${selected}"]`).remove();
+                    dropdown.value = "";
+                } else {
+                    alert(result.error || "Failed to assign facility.");
+                }
+            };
+
+            actionCell.appendChild(dropdown);
+            actionCell.appendChild(addBtn);
+            row.appendChild(actionCell);
+
+            tableBody.appendChild(row);
+        }
+    } catch (err) {
+        console.error("Error loading data:", err);
+        alert("Error loading manager/facility info.");
+    }
+}
+
+// Create a chip element for a facility
+function createFacilityChip(email, facilityId) {
+    const chip = document.createElement("div");
+    chip.className = "facility-chip";
+    chip.textContent = facilityId;
+
+    const removeBtn = document.createElement("button");
+    removeBtn.textContent = "×";
+    removeBtn.onclick = async () => {
+        if (!confirm(`Remove facility '${facilityId}' from manager '${email}'?`)) return;
+
+        const res = await authFetch('/api/remove_facility', {
+            method: 'POST',
+            body: JSON.stringify({ email, facility_id: facilityId })
+        });
+        const result = await res.json();
+        if (res.ok) {
+            alert(result.message);
+            chip.remove();
+
+            // If no chips remain, show "None"
+            const container = document.getElementById(`facilities-${email}`);
+            if (container.children.length === 0) {
+                container.textContent = "None";
+            }
+
+            // Reload the dropdown options
+            loadData();
+        } else {
+            alert(result.error || "Failed to remove facility.");
+        }
+    };
+
+    chip.appendChild(removeBtn);
+    return chip;
+}
+
+document.addEventListener("DOMContentLoaded", loadData);
+</script>
+</body>
+</html>

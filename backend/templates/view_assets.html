@@ -1,0 +1,394 @@
+<script>
+function authFetch(url, options = {}) {
+    const token = localStorage.getItem('token');
+    const headers = {
+        ...(options.headers || {}),
+        'Authorization': `Bearer ${token}`,
+    };
+
+    // Add Content-Type only for POST/PUT if not already present
+    if ((options.method === 'POST' || options.method === 'PUT') &&
+        !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    return fetch(url, {
+        ...options,
+        headers
+    });
+}
+
+</script>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>View Assets</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>View Assets</h1>
+        <div class="filter-section">
+            <label for="facility_id">Facility ID:</label>
+            <select id="facility_id">
+                <option value="">All Facilities</option>
+            </select>
+
+            <label for="type_desc">Asset Type:</label>
+            <select id="type_desc">
+                <option value="">All Types</option>
+            </select>
+
+            <label for="tag_number">Tag Number:</label>
+            <input type="text" id="tag_number">
+
+            <button onclick="authFetchAssets()">Filter</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Tag Number</th>
+                    <th>Description</th>
+                    <th>Type Desc</th>
+                    <th>Facility ID</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="assetsTableBody">
+            </tbody>
+        </table>
+
+        <div class="pagination">
+            <button id="prevPage" disabled onclick="changePage(-1)">Previous</button>
+            <span id="pageInfo">Page 0 of 0</span>
+            <button id="nextPage" disabled onclick="changePage(1)">Next</button>
+        </div>
+
+        <p><a href="/add_asset">Add New Asset</a> | <a href="/dashboard">Back to Dashboard</a></p>
+    </div>
+
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <h2>Edit Asset</h2>
+            <form id="editForm">
+                <input type="hidden" id="edit_tag_number">
+                <input type="hidden" id="edit_facility_id">
+                <div class="form-group">
+                    <label for="edit_description">Description:</label>
+                    <input type="text" id="edit_description">
+                </div>
+                <div class="form-group">
+                    <label for="edit_type_desc">Type Description:</label>
+                    <input type="text" id="edit_type_desc">
+                </div>
+                <div class="form-group">
+                    <label for="edit_manufacturer_desc">Manufacturer Description:</label>
+                    <input type="text" id="edit_manufacturer_desc">
+                </div>
+                <div class="form-group">
+                    <label for="edit_model_num">Model Number:</label>
+                    <input type="text" id="edit_model_num">
+                </div>
+                <div class="form-group">
+                    <label for="edit_equ_model_name">Equipment Model Name:</label>
+                    <input type="text" id="edit_equ_model_name">
+                </div>
+                <div class="form-group">
+                    <label for="edit_orig_manufacturer_desc">Original Manufacturer Description:</label>
+                    <input type="text" id="edit_orig_manufacturer_desc">
+                </div>
+                <div class="form-group">
+                    <label for="edit_serial_num">Serial Number:</label>
+                    <input type="text" id="edit_serial_num">
+                </div>
+                <div class="form-group">
+                    <label for="edit_equ_status_desc">Equipment Status Description:</label>
+                    <input type="text" id="edit_equ_status_desc">
+                </div>
+                <button type="submit">Save</button>
+                <button type="button" class="cancel" onclick="closeModal('editModal')">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="detailsModal" class="modal">
+        <div class="modal-content">
+            <h2>Asset Details</h2>
+            <p><strong>Tag Number:</strong> <span id="detail_tag_number"></span></p>
+            <p><strong>Description:</strong> <span id="detail_description"></span></p>
+            <p><strong>Type Description:</strong> <span id="detail_type_desc"></span></p>
+            <p><strong>Manufacturer Description:</strong> <span id="detail_manufacturer_desc"></span></p>
+            <p><strong>Model Number:</strong> <span id="detail_model_num"></span></p>
+            <p><strong>Equipment Model Name:</strong> <span id="detail_equ_model_name"></span></p>
+            <p><strong>Original Manufacturer Description:</strong> <span id="detail_orig_manufacturer_desc"></span></p>
+            <p><strong>Serial Number:</strong> <span id="detail_serial_num"></span></p>
+            <p><strong>UDI CODE:</strong> <span id="detail_udi_code"></span></p>
+            <p><strong>GUID:</strong> <span id="detail_guid"></span></p>
+            <p><strong>Equipment Status Description:</strong> <span id="detail_equ_status_desc"></span></p>
+            <p><strong>Facility ID:</strong> <span id="detail_facility_id"></span></p>
+            <button class="close" onclick="closeModal('detailsModal')">Close</button>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+    <script>
+        let currentPage = 1;
+        const perPage = 10;
+
+        async function authFetchAssets() {
+            const facility_id = document.getElementById('facility_id').value;
+            const tag_number = document.getElementById('tag_number').value;
+            const type_desc = document.getElementById('type_desc').value;
+
+            const params = new URLSearchParams({
+                page: currentPage,
+                per_page: perPage,
+                ...(facility_id && { facility_id }),
+                ...(tag_number && { tag_number }),
+                ...(type_desc && { type_desc }),
+            });
+
+            try {
+                const token = localStorage.getItem("token");
+                if (!token) {
+                    alert("You are not logged in.");
+                    window.location.href = "/login";
+                    return;
+                }
+
+                const response = await authFetch(`/api/assets?${params}`, {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    console.error("Server responded with error:", data.error);
+                    console.error("Traceback:", data.traceback);  
+                    alert("Server Error: " + (data.error || "Unknown error"));
+                    return;
+                }      
+
+                const tbody = document.getElementById('assetsTableBody');
+                tbody.innerHTML = '';
+                data.assets.forEach(asset => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${asset.tag_number}</td>
+                        <td>${asset.description || ''}</td>
+                        <td>${asset.type_desc || ''}</td>
+                        <td>${asset.facility_id}</td>
+                        <td class="action-buttons">
+                            <button class="details-button" onclick='showDetails(${JSON.stringify(asset)})'>Details</button>
+                            <button class="edit-button" onclick='openEditModal(${JSON.stringify(asset)})'>Edit</button>
+                            <button class="delete-button" onclick="deleteAsset('${asset.tag_number}', '${asset.facility_id}')">Delete</button>
+                            <button class="work-order-button" onclick="createWorkOrder('${asset.tag_number}', '${asset.facility_id}')">Create Work Order</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                const totalPages = Math.ceil(data.total / perPage);
+                document.getElementById('pageInfo').textContent = `Page ${data.page} of ${totalPages}`;
+                document.getElementById('prevPage').disabled = data.page === 1;
+                document.getElementById('nextPage').disabled = data.page === totalPages;
+            } catch (error) {
+                console.error('Error fetching assets:', error);
+                alert('Failed to fetch assets. Please try again.');
+            }
+        }
+
+        function changePage(delta) {
+            currentPage += delta;
+            authFetchAssets();
+        }
+
+        async function populateFilters() {
+            try {
+                const [facilitiesResp, typesResp] = await Promise.all([
+                    authFetch('/api/facilities'),
+                    authFetch('/api/asset_types')
+                ]);
+                const facilitiesData = await facilitiesResp.json();
+                const types = await typesResp.json();
+
+                const facilitySelect = document.getElementById('facility_id');
+
+                // Clear previous options
+                facilitySelect.innerHTML = '';
+
+                // Always add "All Facilities"
+                const allOption = document.createElement('option');
+                allOption.value = '';
+                allOption.textContent = 'All Facilities';
+                facilitySelect.appendChild(allOption);
+
+                // Add the rest of the facilities
+                facilitiesData.facilities.forEach(f => {
+                    const option = document.createElement('option');
+                    option.value = f.facility_id;
+                    option.textContent = f.facility_id;
+                    facilitySelect.appendChild(option);
+                });
+
+                // Default selection = All Facilities
+                facilitySelect.value = '';
+
+                // Populate asset type dropdown
+                const typeSelect = document.getElementById('type_desc');
+                typeSelect.innerHTML = '<option value="">All Types</option>'; // Reset with All Types
+                types.asset_types.forEach(t => {
+                    const option = document.createElement('option');
+                    option.value = t;
+                    option.textContent = t;
+                    typeSelect.appendChild(option);
+                });
+
+                // Add event listeners
+                facilitySelect.addEventListener('change', () => {
+                    currentPage = 1;
+                    authFetchAssets();
+                });
+
+                typeSelect.addEventListener('change', () => {
+                    currentPage = 1;
+                    authFetchAssets();
+                });
+
+                document.getElementById('tag_number').addEventListener('input', () => {
+                    currentPage = 1;
+                    authFetchAssets();
+                });
+
+                // Initial fetch
+                authFetchAssets();
+            } catch (error) {
+                console.error('Error populating filters:', error);
+                alert('Failed to load filters. Please refresh the page.');
+            }
+        }
+
+        function showDetails(asset) {
+            document.getElementById('detail_tag_number').textContent = asset.tag_number;
+            document.getElementById('detail_description').textContent = asset.description || '';
+            document.getElementById('detail_type_desc').textContent = asset.type_desc || '';
+            document.getElementById('detail_manufacturer_desc').textContent = asset.manufacturer_desc || '';
+            document.getElementById('detail_model_num').textContent = asset.model_num || '';
+            document.getElementById('detail_equ_model_name').textContent = asset.equ_model_name || '';
+            document.getElementById('detail_orig_manufacturer_desc').textContent = asset.orig_manufacturer_desc || '';
+            document.getElementById('detail_serial_num').textContent = asset.serial_num || '';  
+            document.getElementById('detail_udi_code').textContent = asset.udi_code;
+            document.getElementById('detail_guid').textContent = asset.guid;
+            document.getElementById('detail_equ_status_desc').textContent = asset.equ_status_desc || '';
+            document.getElementById('detail_facility_id').textContent = asset.facility_id;
+            document.getElementById('detailsModal').style.display = 'flex';
+        }
+
+        function openEditModal(asset) {
+            document.getElementById('edit_tag_number').value = asset.tag_number;
+            document.getElementById('edit_facility_id').value = asset.facility_id;
+            document.getElementById('edit_description').value = asset.description || '';
+            document.getElementById('edit_type_desc').value = asset.type_desc || '';
+            document.getElementById('edit_manufacturer_desc').value = asset.manufacturer_desc || '';
+            document.getElementById('edit_model_num').value = asset.model_num || '';
+            document.getElementById('edit_equ_model_name').value = asset.equ_model_name || '';
+            document.getElementById('edit_orig_manufacturer_desc').value = asset.orig_manufacturer_desc || '';
+            document.getElementById('edit_serial_num').value = asset.serial_num || '';
+            document.getElementById('edit_equ_status_desc').value = asset.equ_status_desc || '';
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        async function deleteAsset(tag_number, facility_id) {
+            if (confirm('Are you sure you want to delete this asset?')) {
+                const response = await authFetch(`/api/assets/${tag_number}/${facility_id}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+                alert(result.message || result.error);
+                authFetchAssets();
+            }
+        }
+
+        function createWorkOrder(tag_number, facility_id) {
+            const encodedTagNumber = encodeURIComponent(tag_number);
+            const encodedFacilityId = encodeURIComponent(facility_id);
+            window.location.href = `/create_work_order?tag_number=${encodedTagNumber}&facility_id=${encodedFacilityId}`;
+        }
+
+        document.getElementById('editForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const tag_number = document.getElementById('edit_tag_number').value;
+            const facility_id = document.getElementById('edit_facility_id').value;
+            const data = {
+                description: document.getElementById('edit_description').value,
+                type_desc: document.getElementById('edit_type_desc').value,
+                manufacturer_desc: document.getElementById('edit_manufacturer_desc').value,
+                model_num: document.getElementById('edit_model_num').value,
+                equ_model_name: document.getElementById('edit_equ_model_name').value,
+                orig_manufacturer_desc: document.getElementById('edit_orig_manufacturer_desc').value,
+                serial_num: document.getElementById('edit_serial_num').value,
+                equ_status_desc: document.getElementById('edit_equ_status_desc').value,
+            };
+            const response = await authFetch(`/api/assets/${tag_number}/${facility_id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            alert(result.message || result.error);
+            closeModal('editModal');
+            authFetchAssets();
+        });
+
+        window.onload = () => {
+            populateFilters();
+        };
+    </script>
+</body>
+</html>

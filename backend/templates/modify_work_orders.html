@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Modify Work Order</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+    <h1>Modify Work Order</h1>
+    <form id="modifyWorkOrderForm">
+        <label>Work Order Number:</label>
+        <input type="text" value="{{ wo['wo_number'] }}" disabled><br><br>
+        <input type="hidden" name="wo_number" value="{{ wo['wo_number'] }}">
+
+        <label for="wo_description">Work Order Description:</label>
+        <input type="text" id="wo_description" name="wo_description" value="{{ wo['wo_description'] }}" required><br><br>
+
+        <label for="dateneeded">Date Needed:</label>
+        <input type="date" id="dateneeded" name="dateneeded" value="{{ wo['dateneeded_str'] }}" required><br><br>
+
+        <label for="wo_type">Work Order Type:</label>
+        <select id="wo_type" name="wo_type" required>
+            <option value="">Select Type</option>
+        </select><br><br>
+
+        <label for="wo_priority">Priority:</label>
+        <select id="wo_priority" name="wo_priority" required>
+            <option value="">Select Priority</option>
+        </select><br><br>
+
+        <label for="assignedtodept">Assigned To Department:</label>
+        <select id="assignedtodept" name="assignedtodept" required>
+            <option value="">Select Department</option>
+        </select><br><br>
+
+        <label for="assignedTechnician">Assigned Technician (optional):</label>
+        <input type="text" id="assignedTechnician" name="assignedTechnician" value="{{ wo.get('assigned_technician', '') }}"><br><br>
+
+        <label for="Rqst_cmnt">Requester's Comments:</label>
+        <input type="text" id="Rqst_cmnt" name="Rqst_cmnt" value="{{ wo.get('requestercomments', '') }}"><br><br>
+
+
+        <label for="parts_needed">Parts Needed:</label>
+            <select id="parts_needed" name="parts_needed">
+            <option value="Not required">Not required</option>
+            <option value="Battery">Battery</option>
+            <option value="Phantom">Phantom</option>
+            </select>
+
+            <label for="parts_quantity">Quantity:</label>
+            <input type="number" id="parts_quantity" name="parts_quantity" min="0" max="99" value="0"><br><br>
+
+        <label for="work_order_status">Work Order Status:</label>
+        <select id="work_order_status" name="work_order_status">
+            <option value="Open" {% if wo['work_order_status'] == "Open" %}selected{% end %}>Open</option>
+            <option value="Waiting to be assigned" {% if wo['work_order_status'] == "Waiting to be assigned" %}selected{% end %}>Waiting to be assigned</option>
+            <option value="In progress" {% if wo['work_order_status'] == "In progress" %}selected{% end %}>In progress</option>
+            <option value="Closed" {% if wo['work_order_status'] == "Closed" %}selected{% end %}>Closed</option>
+        </select><br><br>
+
+        <label for="work_activity_description">Work Activity Description:</label>
+        <textarea id="work_activity_description" name="work_activity_description" rows="4" cols="50">{{ wo['work_activity_description'] }}</textarea><br><br>
+
+        <button type="submit">Update Work Order</button>
+    </form>
+
+    <p><a href="/view_work_orders">Back to Work Orders</a></p>
+</div>
+
+<script>
+function authFetch(url, options = {}) {
+    const token = localStorage.getItem('token');
+    const headers = {
+        ...(options.headers || {}),
+        'Authorization': `Bearer ${token}`,
+    };
+
+    if ((options.method === 'POST' || options.method === 'PUT') && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    return fetch(url, {
+        ...options,
+        headers
+    });
+}
+</script>
+
+<script>
+async function authFetchOptions() {
+    try {
+        const [types, priorities, depts] = await Promise.all([
+            authFetch('/api/work_order_types').then(r => r.json()).then(d => d.work_order_types),
+            authFetch('/api/work_order_priorities').then(r => r.json()).then(d => d.work_order_priorities),
+            authFetch('/api/departments').then(r => r.json()).then(d => d.departments)
+        ]);
+
+        populateSelect('wo_type', types.map(t => ({ value: t.wo_type_cd, label: t.wo_type_cd_desc })), '{{ wo["wo_type"] }}');
+        populateSelect('wo_priority', priorities.map(p => ({ value: p.wo_priority_cd, label: p.wo_priority_cd_desc })), '{{ wo["wo_priority"] }}');
+        populateSelect('assignedtodept', depts.map(d => ({ value: d.dept_cd, label: d.dept_cd_desc })), '{{ wo["assignedtodept"] }}');
+
+    } catch (error) {
+        console.error('Error fetching options:', error);
+    }
+}
+
+function populateSelect(id, options, selectedValue) {
+    const select = document.getElementById(id);
+    options.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.label;
+        if (opt.value === selectedValue) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', authFetchOptions);
+
+document.getElementById("modifyWorkOrderForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const wo_number = "{{ wo['wo_number'] }}";
+
+    const payload = {
+        wo_description: document.getElementById("wo_description").value,
+        dateneeded: document.getElementById("dateneeded").value,
+        wo_type: document.getElementById("wo_type").value,
+        wo_priority: document.getElementById("wo_priority").value,
+        assignedtodept: document.getElementById("assignedtodept").value,
+        assigned_technician: document.getElementById("assignedTechnician").value,
+        requestercomments: document.getElementById("Rqst_cmnt").value,
+        parts_needed: document.getElementById("parts_needed").value,
+        parts_quantity: parseInt(document.getElementById('parts_quantity').value) || 0,
+        work_order_status: document.getElementById("work_order_status").value,
+        work_activity_description: document.getElementById("work_activity_description").value
+    };
+
+    try {
+        const res = await authFetch(`/modify_work_orders/${wo_number}`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            console.error("Server Error:", data.error);
+            console.error("Traceback:", data.traceback);
+            alert("Update failed: " + data.error);
+        } else {
+            alert("Work order updated successfully.");
+            window.location.href = "/view_work_orders";
+        }
+    } catch (err) {
+        console.error("Fetch failed:", err);
+        alert("Unexpected error occurred.");
+    }
+});
+</script>
+</body>
+</html>

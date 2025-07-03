@@ -1,0 +1,169 @@
+<script>
+function authFetch(url, options = {}) {
+    const token = localStorage.getItem('token');
+    const headers = {
+        ...(options.headers || {}),
+        'Authorization': `Bearer ${token}`,
+    };
+
+    // Add Content-Type only for POST/PUT if not already present
+    if ((options.method === 'POST' || options.method === 'PUT') &&
+        !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    return fetch(url, {
+        ...options,
+        headers
+    });
+}
+
+</script>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Add Asset</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" style="margin-top: 10px;">
+        <h1>Add New Asset</h1>
+        <form id="addAssetForm">
+            <div class="form-group">
+                <label for="tag_number">Tag Number:</label>
+                <input type="text" id="tag_number" name="tag_number" required>
+            </div>
+            <div class="form-group">
+                <label for="description">Description:</label>
+                <input type="text" id="description" name="description">
+            </div>
+            <div class="form-group">
+                <label for="type_desc">Type Description:</label>
+                <input type="text" id="type_desc" name="type_desc">
+            </div>
+            <div class="form-group">
+                <label for="manufacturer_desc">Manufacturer Description:</label>
+                <input type="text" id="manufacturer_desc" name="manufacturer_desc">
+            </div>
+            <div class="form-group">
+                <label for="model_num">Model Number:</label>
+                <input type="text" id="model_num" name="model_num">
+            </div>
+            <div class="form-group">
+                <label for="equ_model_name">Equipment Model Name:</label>
+                <input type="text" id="equ_model_name" name="equ_model_name">
+            </div>
+            <div class="form-group">
+                <label for="orig_manufacturer_desc">Original Manufacturer Description:</label>
+                <input type="text" id="orig_manufacturer_desc" name="orig_manufacturer_desc">
+            </div>
+            <div class="form-group">
+                <label for="serial_num">Serial Number:</label>
+                <input type="text" id="serial_num" name="serial_num">
+            </div>
+            <div class="form-group">
+                <label for="equ_status_desc">Equipment Status Description:</label>
+                <input type="text" id="equ_status_desc" name="equ_status_desc">
+            </div>
+            <div class="form-group">
+                <label for="facility_id">Facility ID:</label>
+                <input type="text" id="facility_id" name="facility_id" required>
+            </div>
+            <button type="submit">Add Asset</button>
+        </form>
+        <p><a href="/view_assets">View Assets</a> | <a href="/">Back to Login</a></p>
+    </div>
+    <script>
+        document.getElementById('addAssetForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            for (const key in data) {
+                if (data[key] === '') {
+                    data[key] = null;
+                }
+            }
+            try {
+                const response = await authFetch('/api/assets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.message);
+                    e.target.reset();
+                } else {
+                    alert(result.error);
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        });
+    </script>
+</body>
+</html>

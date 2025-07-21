@@ -4,6 +4,58 @@
     <meta charset="UTF-8">
     <title>View Work Orders</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Navigation button styles */
+        .nav-button {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+            cursor: pointer;
+        }
+
+        .nav-button:hover {
+            background-color: #2980b9;
+        }
+
+        .nav-links {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 10px;
+            border: 1px solid #ccc;
+            text-align: left;
+        }
+
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -27,7 +79,11 @@
             <tbody id="workOrdersTableBody">
             </tbody>
         </table>
-        <p><a href="/dashboard">Back to Dashboard</a></p>
+
+        <!-- Styled Back to Dashboard button -->
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-button">Back to Dashboard</a>
+        </div>
     </div>
 
     <script>
@@ -72,21 +128,17 @@
                             <td>${wo.dateneeded ? new Date(wo.dateneeded).toLocaleDateString() : 'N/A'}</td>
                             <td>${wo.assigned_technician || 'Unassigned'}</td>   
                             <td>${wo.Work_Order_Status || 'Unknown'}</td>        
-                            <td><button onclick="modifyWorkOrder('${wo.wo_number}')">Modify</button></td>
+                            <td><a href="/modify_work_orders/${encodeURIComponent(wo.wo_number)}" class="nav-button">Modify</a></td>
                         `;
                         tbody.appendChild(row);
                     });
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="9">No work orders found.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="11">No work orders found.</td></tr>';
                 }
             } catch (error) {
                 console.error('Error fetching work orders:', error);
                 alert(`Failed to fetch work orders. Please try again. Error: ${error.message}`);
             }
-        }
-
-        function modifyWorkOrder(wo_number) {
-            window.location.href = `/modify_work_orders/${encodeURIComponent(wo_number)}`;
         }
 
         window.onload = fetchWorkOrders;

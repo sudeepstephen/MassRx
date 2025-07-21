@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Asset Details</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f7f7f7;
+    }
+    .container {
+      max-width: 700px;
+      margin: 40px auto;
+      background: #fff;
+      padding: 30px 40px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    p {
+      margin: 8px 0;
+    }
+    strong {
+      color: #333;
+    }
+    .image-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+      justify-content: center;
+    }
+    .file-box {
+      width: 120px;
+      text-align: center;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background-color: #f9f9f9;
+    }
+    .file-box img, .file-box .file-icon {
+      width: 100px;
+      height: 100px;
+      object-fit: cover;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .file-box .file-icon {
+      font-size: 48px;
+      color: #007bff;
+      line-height: 100px;
+    }
+    .file-box .desc {
+      margin-top: 5px;
+      font-size: 0.9em;
+      color: #555;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.6);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 600px;
+      text-align: center;
+      position: relative;
+    }
+    .modal-content img, .modal-content iframe {
+      max-width: 100%;
+      max-height: 400px;
+    }
+    .modal-nav {
+      margin-top: 10px;
+    }
+    .file-count {
+      margin-top: 10px;
+      font-size: 0.9em;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Asset Details</h1>
+  <p><strong>Tag Number:</strong> {{ asset.tag_number }}</p>
+  <p><strong>Description:</strong> {{ asset.description }}</p>
+  <p><strong>Type Description:</strong> {{ asset.type_desc }}</p>
+  <p><strong>Manufacturer Description:</strong> {{ asset.manufacturer_desc }}</p>
+  <p><strong>Model Number:</strong> {{ asset.model_num }}</p>
+  <p><strong>Equipment Model Name:</strong> {{ asset.equ_model_name }}</p>
+  <p><strong>Original Manufacturer Description:</strong> {{ asset.orig_manufacturer_desc }}</p>
+  <p><strong>Serial Number:</strong> {{ asset.serial_num }}</p>
+  <p><strong>UDI Code:</strong> {{ asset.udi_code if hasattr(asset, 'udi_code') else '' }}</p>
+  <p><strong>GUID:</strong> {{ asset.guid if hasattr(asset, 'guid') else '' }}</p>
+  <p><strong>Equipment Status Description:</strong> {{ asset.equ_status_desc }}</p>
+  <p><strong>Facility ID:</strong> {{ asset.facility_id }}</p>
+
+  <h3 style="margin-top: 30px;">Uploaded Files</h3>
+  <div class="image-grid" id="assetFiles"></div>
+
+  <a href="/view_assets">Back to Assets</a>
+</div>
+
+<div class="modal" id="fileModal">
+  <div class="modal-content">
+    <div id="modalViewer"></div>
+    <div class="file-count" id="fileCounter"></div>
+    <div class="modal-nav">
+      <button onclick="prevFile()">⟨ Prev</button>
+      <button onclick="nextFile()">Next ⟩</button>
+      <button onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const tag_number = "{{ asset.tag_number }}";
+  const facility_id = "{{ asset.facility_id }}";
+  const token = localStorage.getItem("token");
+  const headers = { Authorization: "Bearer " + token };
+
+  let files = [];
+  let currentIndex = 0;
+
+  function loadFiles() {
+    fetch(`/api/assets/images?tag_number=${tag_number}&facility_id=${facility_id}`, { headers })
+      .then(res => res.json())
+      .then(data => {
+        files = data.images || [];
+        const container = document.getElementById("assetFiles");
+        container.innerHTML = "";
+
+        files.forEach((f, i) => {
+          const box = document.createElement("div");
+          box.className = "file-box";
+
+          let preview = "";
+
+          if (f.content_type && f.content_type.startsWith("image/")) {
+            preview = `<img src="${f.url}" onclick="openModal(${i})">`;
+          } else if (f.content_type === "application/pdf") {
+            preview = `<iframe src="${f.url}" width="100%" height="100px" onclick="openModal(${i})"></iframe>`;
+          } else if (
+            f.content_type === "text/plain" ||
+            f.content_type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+            f.content_type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          ) {
+            preview = `
+              <div class="file-icon" onclick="openModal(${i})">📄</div>
+              <div><a href="${f.url}" download="${f.filename || 'file'}">Download File</a></div>
+            `;
+          } else {
+            preview = `
+              <div class="file-icon" onclick="openModal(${i})">📎</div>
+              <div><a href="${f.url}" download="${f.filename || 'file'}">Download File</a></div>
+            `;
+          }
+
+          box.innerHTML = `
+            ${preview}
+            <div class="desc">${f.description || "No description"}</div>
+          `;
+          container.appendChild(box);
+        });
+      });
+  }
+
+  function openModal(index) {
+    currentIndex = index;
+    const viewer = document.getElementById("modalViewer");
+    const counter = document.getElementById("fileCounter");
+    const file = files[currentIndex];
+    viewer.innerHTML = "";
+
+    // Include file description at the top
+    const descriptionHTML = `<div style="margin-bottom: 10px; font-weight: bold;">${file.description || "No description"}</div>`;
+    let previewHTML = "";
+
+    if (file.content_type && file.content_type.startsWith("image/")) {
+      previewHTML = `<img src="${file.url}" style="max-width:100%; max-height:100%;" />`;
+    } else if (file.content_type === "application/pdf") {
+      previewHTML = `<iframe src="${file.url}" width="100%" height="400px"></iframe>`;
+    } else if (
+      file.content_type === "text/plain" ||
+      file.content_type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      file.content_type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ) {
+      previewHTML = `
+        <div style="text-align:center;">
+          <strong>${file.filename || "File"}</strong><br>
+          <a href="${file.url}" download>Download File</a>
+        </div>
+      `;
+    } else {
+      previewHTML = `
+        <div style="text-align:center;">
+          <strong>Unknown File Type</strong><br>
+          <a href="${file.url}" download>Download</a>
+        </div>
+      `;
+    }
+
+    viewer.innerHTML = descriptionHTML + previewHTML;
+    counter.textContent = `${currentIndex + 1} / ${files.length}`;
+    document.getElementById("fileModal").style.display = "flex";
+  }
+
+
+  function closeModal() {
+    document.getElementById("fileModal").style.display = "none";
+  }
+
+  function prevFile() {
+    if (!files.length) return;
+    currentIndex = (currentIndex - 1 + files.length) % files.length;
+    openModal(currentIndex);
+  }
+
+  function nextFile() {
+    if (!files.length) return;
+    currentIndex = (currentIndex + 1) % files.length;
+    openModal(currentIndex);
+  }
+
+  loadFiles();
+</script>
+</body>
+</html>

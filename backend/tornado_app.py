@@ -4,10 +4,11 @@ import os
 import traceback
 from tornado.options import define, options
 from api import (
-    PurchaseHistoryHandler, RegisterHandler, LoginHandler, AssetHandler, FacilityHandler, ManagerListHandler, AssignFacilityHandler, 
-    RemoveFacilityHandler, CurrentUserHandler, AssetTypeHandler, WorkOrderHandler, ModifyWorkOrderHandler, 
+    AssetDeleteHandler, AssetDetailsHandler, AssetEditHandler, DeleteAssetFileHandler, GetAssetImagesHandler, MediaFileHandler, PartsHandler, PurchaseApproveHandler, PurchaseDeclineHandler, PurchaseHistoryHandler, PurchaseStatusUpdateHandler, RegisterHandler, LoginHandler, AssetHandler, FacilityHandler, ManagerListHandler, AssignFacilityHandler, 
+    RemoveFacilityHandler, CurrentUserHandler, AssetTypeHandler, UploadAssetImagesHandler, WorkOrderHandler, ModifyWorkOrderHandler, 
     WorkOrderTypeHandler, WorkOrderPriorityHandler, DepartmentHandler
 )
+
 
 # Define command-line options
 define("port", default=8888, help="Run on the given port", type=int)
@@ -45,8 +46,6 @@ class BaseHandler(tornado.web.RequestHandler):
             return UserService.verify_jwt(token)
         except Exception:
             return None
-
-
 
     async def get_user_context(self, email):
         from core import UserService
@@ -142,6 +141,14 @@ class Application(tornado.web.Application):
             (r"/dashboard", DashboardPageHandler),
             (r"/add_asset", AddAssetPageHandler),
             (r"/view_assets", ViewAssetsPageHandler),
+            (r"/asset_details", AssetDetailsHandler),
+            (r"/asset_edit", AssetEditHandler),
+            (r"/asset_delete", AssetDeleteHandler),
+            (r"/api/assets/upload_images", UploadAssetImagesHandler),
+            (r"/api/asset_images", UploadAssetImagesHandler),
+            (r"/api/assets/images", GetAssetImagesHandler),
+            (r"/api/assets/delete_file/([0-9]+)", DeleteAssetFileHandler),
+            (r"/media/([0-9]+)", MediaFileHandler),
             (r"/create_work_order", CreateWorkOrderPageHandler),
             (r"/logout", LogoutHandler),
             (r"/api/register", RegisterHandler),
@@ -160,9 +167,13 @@ class Application(tornado.web.Application):
             (r"/api/work_order_priorities", WorkOrderPriorityHandler),
             (r"/view_work_orders", ViewWorkOrdersPageHandler),
             (r"/modify_work_orders/([^/]+)", ModifyWorkOrderHandler), 
+            (r"/api/parts", PartsHandler),
             (r"/api/departments", DepartmentHandler),
             (r"/purchase_history", PurchaseHistoryPageHandler),          # for HTML
             (r"/api/purchase_history", PurchaseHistoryHandler),          # for JSON
+            (r"/api/purchase_approve/([0-9]+)", PurchaseApproveHandler),
+            (r"/api/purchase_decline/([0-9]+)", PurchaseDeclineHandler),
+            (r"/api/purchase_status/(\d+)", PurchaseStatusUpdateHandler),
             (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static"}),
             (r"/.*", NotFoundHandler),
 

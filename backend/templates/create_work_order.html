@@ -1,69 +1,52 @@
-<script>
-function authFetch(url, options = {}) {
-    const token = localStorage.getItem('token');
-    const headers = {
-        ...(options.headers || {}),
-        'Authorization': `Bearer ${token}`,
-    };
-
-    // Add Content-Type only for POST/PUT if not already present
-    if ((options.method === 'POST' || options.method === 'PUT') &&
-        !headers['Content-Type']) {
-        headers['Content-Type'] = 'application/json';
-    }
-
-    return fetch(url, {
-        ...options,
-        headers
-    });
-}
-
-</script>
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Create Work Order</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Added button style */
+        .btn-create {
+            background-color: #27ae60; /* green */
+            color: white;
+            padding: 12px 24px;
+            font-size: 1.1em;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 700;
+            box-shadow: 0 4px 12px rgba(39, 174, 96, 0.5);
+            transition: background-color 0.3s ease;
+            user-select: none;
+        }
+        .btn-create:hover {
+            background-color: #1e8449;
+        }
+
+        /* Navigation Buttons */
+        .nav-links {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .nav-button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+            user-select: none;
+        }
+
+        .nav-button:hover {
+            background-color: #0056b3;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -71,7 +54,6 @@ function authFetch(url, options = {}) {
         <form id="workOrderForm">
             <label for="assetNumber">Asset Number:</label>
             <input type="text" id="assetNumber" name="assetNumber" value="" required><br><br>
-            
             
             <label for="facilityId">Facility ID:</label>
             <select id="facilityId" name="facilityId" required>
@@ -102,13 +84,19 @@ function authFetch(url, options = {}) {
             <label for="assignedTechnician">Assigned Technician (optional):</label>
             <input type="text" id="assignedTechnician" name="assignedTechnician"><br><br>
 
-            <label for="Requester's Comments">Requester's Comments:</label>
+            <label for="Rqst_cmnt">Requester's Comments:</label>
             <input type="text" id="Rqst_cmnt" name="Requester's Comments" required><br><br>
             
-            <button type="submit">Create Work Order</button>
+            <!-- Updated button -->
+            <button type="submit" id="btnCreateWorkOrder" class="btn-create">Create Work Order</button>
         </form>
-        <p><a href="/dashboard">Back to Dashboard</a></p>
+
+        <!-- Styled Back to Dashboard button -->
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-button">Back to Dashboard</a>
+        </div>
     </div>
+
     <script>
         async function authFetchOptions() {
             try {
@@ -163,11 +151,10 @@ function authFetch(url, options = {}) {
                 }
                 alert('Work order created successfully: ' + data.wo_number);
 
-                // ✅ Set today's date as the minimum selectable date
-            const today = new Date().toISOString().split('T')[0];
-            const woDateInput = document.getElementById("woDate");
-            woDateInput.min = today;
-           //woDateInput.value = today;
+                // Set today's date as minimum selectable date
+                const today = new Date().toISOString().split('T')[0];
+                const woDateInput = document.getElementById("woDate");
+                woDateInput.min = today;
             } catch (error) {
                 alert('Error: ' + error.message);
                 console.error('Error:', error);
@@ -175,39 +162,36 @@ function authFetch(url, options = {}) {
         });
     </script>
     <script>
-    const params = new URLSearchParams(window.location.search);
-    const assetNumber = params.get("tag_number"); // this matches the actual URL
-
-    if (assetNumber) {
-        document.getElementById("assetNumber").value = assetNumber;
-    }
-</script>
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams(window.location.search);
-        const assetNumber = params.get("tag_number");
-        const facilityId = params.get("facility_id");
+        const assetNumber = params.get("tag_number"); // this matches the actual URL
 
         if (assetNumber) {
             document.getElementById("assetNumber").value = assetNumber;
         }
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const assetNumber = params.get("tag_number");
+            const facilityId = params.get("facility_id");
 
-        if (facilityId) {
-            const facilitySelect = document.getElementById("facilityId");
+            if (assetNumber) {
+                document.getElementById("assetNumber").value = assetNumber;
+            }
 
-            // Wait until options are populated
-            const waitForOptions = setInterval(() => {
-                const foundOption = Array.from(facilitySelect.options).find(opt => opt.value === facilityId);
-                if (foundOption) {
-                    facilitySelect.value = facilityId;
-                    clearInterval(waitForOptions);
-                }
-            }, 100);
-        }
-    });
-</script>
+            if (facilityId) {
+                const facilitySelect = document.getElementById("facilityId");
 
-
-
+                // Wait until options are populated
+                const waitForOptions = setInterval(() => {
+                    const foundOption = Array.from(facilitySelect.options).find(opt => opt.value === facilityId);
+                    if (foundOption) {
+                        facilitySelect.value = facilityId;
+                        clearInterval(waitForOptions);
+                    }
+                }, 100);
+            }
+        });
+    </script>
 </body>
 </html>

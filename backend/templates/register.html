@@ -1,11 +1,32 @@
-<script type="text/javascript">
-    var gk_isXlsx = false;
-    var gk_xlsxFileLookup = {};
-    var gk_fileData = {};
-    function filledCell(cell) {
-        return cell !== '' && cell != null;
+<script>
+function authFetch(url, options = {}) {
+    const token = localStorage.getItem('token');
+    const headers = {
+        ...(options.headers || {}),
+        'Authorization': `Bearer ${token}`,
+    };
+
+    // Add Content-Type only for POST/PUT if not already present
+    if ((options.method === 'POST' || options.method === 'PUT') &&
+        !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
     }
-    function loadFileData(filename) {
+
+    return fetch(url, {
+        ...options,
+        headers
+    });
+}
+
+</script>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
         if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
             try {
                 var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
@@ -19,11 +40,11 @@
 
                 // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
                 var headerRowIndex = filteredData.findIndex((row, index) =>
-                    row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
                 );
                 // Fallback
                 if (headerRowIndex === -1 || headerRowIndex > 25) {
-                    headerRowIndex = 0;
+                  headerRowIndex = 0;
                 }
 
                 // Convert filtered JSON back to CSV
@@ -36,11 +57,9 @@
             }
         }
         return gk_fileData[filename] || "";
-    }
-</script>
-<!DOCTYPE html>
+        }
+        </script><!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <title>Register</title>
@@ -49,14 +68,12 @@
         .form-group {
             margin-bottom: 15px;
         }
-
         .form-group label {
             display: block;
             margin-bottom: 5px;
             font-weight: 500;
             color: #2c3e50;
         }
-
         .form-group input {
             width: 100%;
             padding: 8px;
@@ -65,7 +82,6 @@
             border-radius: 4px;
             font-size: 1em;
         }
-
         button {
             padding: 10px 20px;
             background-color: #3498db;
@@ -76,13 +92,11 @@
             font-size: 1em;
             transition: background-color 0.3s ease;
         }
-
         button:hover {
             background-color: #2980b9;
         }
     </style>
 </head>
-
 <body>
     <div class="container">
         <h1>Register</h1>
@@ -109,7 +123,7 @@
             const formData = new FormData(e.target);
             const data = Object.fromEntries(formData.entries());
             try {
-                const response = await fetch('/api/register', {
+                const response = await authFetch('/api/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
@@ -127,5 +141,4 @@
         });
     </script>
 </body>
-
 </html>

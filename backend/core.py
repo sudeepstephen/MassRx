@@ -5,10 +5,48 @@ import jwt as pyjwt
 import datetime
 import os
 from tornado.options import options
+import smtplib
+import mimetypes
+from email.mime.text import MIMEText
+from psycopg2.extras import RealDictCursor
 
 # Configuration
 SECRET_KEY = "super_secret_cookie_key_123"
 JWT_ALGORITHM = "HS256"
+
+def send_email(subject, message):
+    import os
+    from email.mime.text import MIMEText
+    import smtplib
+
+    smtp_server = 'smtp.gmail.com'
+    smtp_port = 587
+    from_email = 'ppreity.ashley@gmail.com'
+    to_email = 'ppreity.ashley@gmail.com'  # Or any recipient for testing
+
+    # 🔐 Try App Password or fallback
+    password = 'fljp umsx oflf jbru'
+
+    print("Preparing to send email...")
+    print(f"From: {from_email}, To: {to_email}, Subject: {subject}")
+
+    msg = MIMEText(message)
+    msg['Subject'] = subject
+    msg['From'] = from_email
+    msg['To'] = to_email
+
+    try:
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.set_debuglevel(1)  # 👈 Shows full SMTP log
+            server.starttls()
+            server.login(from_email, password)
+            server.send_message(msg)
+            print("✅ Email sent successfully!")
+    except Exception as e:
+        print(f"❌ Error sending email: {e}")
+
+
+BASE_UPLOAD_PATH = os.path.join(os.getcwd(), 'static', 'uploads')
 
 class Database:
     def __init__(self):
@@ -167,6 +205,28 @@ class AssetService:
                 return assets, total
         finally:
             self.db.put_connection(conn)
+            
+    async def get_asset_by_tag_and_facility(self, client_id, tag_number, facility_id):
+        conn = self.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT tag_number, facility_id, description, type_desc,
+                        manufacturer_desc, model_num, equ_model_name,
+                        orig_manufacturer_desc, serial_num, equ_status_desc, udi_code, guid
+                    FROM asset_mstr
+                    WHERE tag_number = %s AND facility_id = %s AND client_id = %s
+                    """,
+                    (tag_number, facility_id, client_id)
+                )
+                row = cur.fetchone()
+                if row:
+                    columns = [desc[0] for desc in cur.description]
+                    return dict(zip(columns, row))
+                return None
+        finally:
+            self.db.put_connection(conn)
 
 
     async def get_asset_by_id(self, client_id, tag_number, facility_id):
@@ -239,27 +299,41 @@ class AssetService:
             self.db.put_connection(conn)
 
     async def add_asset(self, client_id, tag_number, description, type_desc,
-                       manufacturer_desc, model_num, equ_model_name,
-                       orig_manufacturer_desc, serial_num, equ_status_desc,
-                       facility_id):
+                    manufacturer_desc, model_num, equ_model_name,
+                    orig_manufacturer_desc, serial_num, equ_status_desc,
+                    facility_id, udi_code=None, guid=None):
         conn = self.db.get_connection()
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO asset_mstr (
-                        tag_number, description, type_desc, manufacturer_desc,
-                        model_num, equ_model_name, orig_manufacturer_desc,
-                        serial_num, equ_status_desc, facility_id, client_id
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                columns = [
+                    "tag_number", "description", "type_desc", "manufacturer_desc",
+                    "model_num", "equ_model_name", "orig_manufacturer_desc",
+                    "serial_num", "equ_status_desc", "facility_id", "client_id"
+                ]
+                values = [
+                    tag_number, description, type_desc, manufacturer_desc,
+                    model_num, equ_model_name, orig_manufacturer_desc,
+                    serial_num, equ_status_desc, facility_id, client_id
+                ]
+
+                # Add optional fields if provided
+                if udi_code is not None and udi_code != '':
+                    columns.append("udi_code")
+                    values.append(udi_code)
+
+                if guid is not None and guid != '':
+                    columns.append("guid")
+                    values.append(guid)
+
+                placeholders = ', '.join(['%s'] * len(values))
+                column_names = ', '.join(columns)
+
+                query = f"""
+                    INSERT INTO asset_mstr ({column_names})
+                    VALUES ({placeholders})
                     RETURNING tag_number
-                    """,
-                    (
-                        tag_number, description, type_desc, manufacturer_desc,
-                        model_num, equ_model_name, orig_manufacturer_desc,
-                        serial_num, equ_status_desc, facility_id, client_id
-                    )
-                )
+                """
+                cur.execute(query, values)
                 conn.commit()
                 return {"success": True}
         except psycopg2.IntegrityError:
@@ -269,27 +343,64 @@ class AssetService:
         finally:
             self.db.put_connection(conn)
 
-    async def update_asset(self, client_id, tag_number, facility_id, description,
-                          type_desc, manufacturer_desc, model_num, equ_model_name,
-                          orig_manufacturer_desc, serial_num, equ_status_desc):
+
+    async def update_asset(self, client_id, tag_number, facility_id, description=None,
+                        type_desc=None, manufacturer_desc=None, model_num=None,
+                        equ_model_name=None, orig_manufacturer_desc=None, serial_num=None,
+                        equ_status_desc=None, udi_code=None, guid=None):
         conn = self.db.get_connection()
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
+                # Prepare the columns to update dynamically
+                updates = []
+                values = []
+
+                if description is not None:
+                    updates.append("description = %s")
+                    values.append(description)
+                if type_desc is not None:
+                    updates.append("type_desc = %s")
+                    values.append(type_desc)
+                if manufacturer_desc is not None:
+                    updates.append("manufacturer_desc = %s")
+                    values.append(manufacturer_desc)
+                if model_num is not None:
+                    updates.append("model_num = %s")
+                    values.append(model_num)
+                if equ_model_name is not None:
+                    updates.append("equ_model_name = %s")
+                    values.append(equ_model_name)
+                if orig_manufacturer_desc is not None:
+                    updates.append("orig_manufacturer_desc = %s")
+                    values.append(orig_manufacturer_desc)
+                if serial_num is not None:
+                    updates.append("serial_num = %s")
+                    values.append(serial_num)
+                if equ_status_desc is not None:
+                    updates.append("equ_status_desc = %s")
+                    values.append(equ_status_desc)
+                if udi_code is not None:
+                    updates.append("udi_code = %s")
+                    values.append(udi_code)
+                if guid is not None:
+                    updates.append("guid = %s")
+                    values.append(guid)
+
+                if not updates:
+                    # Nothing to update
+                    return {"success": False, "error": "No fields to update"}
+
+                # Build the SQL query string
+                set_clause = ", ".join(updates)
+                query = f"""
                     UPDATE asset_mstr
-                    SET description = %s, type_desc = %s, manufacturer_desc = %s,
-                        model_num = %s, equ_model_name = %s, orig_manufacturer_desc = %s,
-                        serial_num = %s, equ_status_desc = %s
+                    SET {set_clause}
                     WHERE tag_number = %s AND facility_id = %s AND client_id = %s
                     RETURNING tag_number
-                    """,
-                    (
-                        description, type_desc, manufacturer_desc, model_num,
-                        equ_model_name, orig_manufacturer_desc, serial_num,
-                        equ_status_desc, tag_number, facility_id, client_id
-                    )
-                )
+                """
+                values.extend([tag_number, facility_id, client_id])
+
+                cur.execute(query, values)
                 if cur.fetchone():
                     conn.commit()
                     return {"success": True}
@@ -317,6 +428,100 @@ class AssetService:
                 return {"success": False, "error": "Asset not found"}
         except Exception as e:
             return {"success": False, "error": str(e)}
+        finally:
+            self.db.put_connection(conn)
+    
+    async def get_image_count(self, tag_number, facility_id, client_id):
+        conn = self.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                SELECT COUNT(*) FROM asset_images
+                WHERE tag_number = %s AND facility_id = %s AND client_id = %s
+            """, (tag_number, facility_id, client_id))
+            return cur.fetchone()[0]
+        finally:
+            self.db.put_connection(conn)
+
+    async def upload_image_to_disk(self, tag_number, facility_id, client_id, fileinfo, description="", content_type=None):
+        try:
+            # Step 1: Create directory
+            target_folder = os.path.join(BASE_UPLOAD_PATH, client_id, facility_id, tag_number)
+            os.makedirs(target_folder, exist_ok=True)
+            print("[UPLOAD] Target folder:", target_folder)
+
+            # Step 2: Generate filename
+            existing = [f for f in os.listdir(target_folder) if f.startswith("img") and f[3:].split('.')[0].isdigit()]
+            next_img_num = max([int(f[3:].split('.')[0]) for f in existing] + [0]) + 1
+            ext = os.path.splitext(fileinfo['filename'])[1].lower()
+            filename = f"img{next_img_num}{ext}"
+
+            # Step 3: Save file to disk
+            file_path = os.path.join(target_folder, filename)
+            print("[UPLOAD] Writing file:", file_path)
+
+            with open(file_path, "wb") as f:
+                f.write(fileinfo["body"])
+
+            image_path = f"uploads/{client_id}/{facility_id}/{tag_number}/{filename}"
+            print("[UPLOAD] Image path saved to DB:", image_path)
+
+            # Step 4: Save DB record including `filename`
+            conn = self.db.get_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO asset_images (
+                            tag_number, facility_id, client_id, image_path, 
+                            description, content_type, filename
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        tag_number, facility_id, client_id,
+                        image_path, description, content_type, fileinfo['filename']
+                    ))
+                    conn.commit()
+                    print("[UPLOAD] Inserted image record into DB")
+            finally:
+                self.db.put_connection(conn)
+
+        except Exception as e:
+            print("[UPLOAD ERROR]", str(e))
+
+
+    def get_images_for_asset(self, tag_number, facility_id, client_id):
+        conn = self.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, description, content_type
+                    FROM asset_images
+                    WHERE tag_number = %s AND facility_id = %s AND client_id = %s
+                """, (tag_number, facility_id, client_id))
+                
+                results = cur.fetchall()
+                images = []
+                for row in results:
+                    image_id, description, content_type = row
+                    images.append({
+                        "url": f"/media/{image_id}",
+                        "description": description or "",
+                        "content_type": content_type or "application/octet-stream"
+                    })
+                return images
+        finally:
+            self.db.put_connection(conn)
+
+    async def delete_asset_image(self, file_id, client_id):
+        conn = self.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM asset_images WHERE id = %s AND client_id = %s RETURNING id",
+                    (file_id, client_id)
+                )
+                row = cur.fetchone()
+                return row is not None
         finally:
             self.db.put_connection(conn)
 
@@ -473,14 +678,79 @@ class AssetService:
 
 
     # Update a work order
-    async def update_work_order(self, client_id, wo_number, wo_description, wo_type,
-                                wo_priority, assignedtodept, dateneeded, assigned_technician,
-                                requestercomments, parts_needed, parts_quantity, work_order_status, work_activity_description):
+    async def update_work_order(self, client_id, wo_number, wo_description, wo_type, 
+                            wo_priority, assignedtodept, dateneeded, assigned_technician,
+                            requestercomments, parts_needed, parts_quantity, work_order_status, work_activity_description):
         conn = self.db.get_connection()
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
+
+                if parts_needed and parts_needed.lower() != "not required":
+
+                    # 1. Get current stock and approval requirement
+                    cur.execute("""
+                        SELECT available_quantity, purchase_order_approval 
+                        FROM parts 
+                        WHERE part_name = %s AND client_id = %s
+                    """, (parts_needed, client_id))
+                    row = cur.fetchone()
+                    if not row:
+                        return {"success": False, "error": f"'{parts_needed}' not found in inventory."}
+
+                    available_quantity, approval_required = row
+                    approval_required = approval_required or 'not required'
+
+                    # 2. Block update if request exceeds stock
+                    if parts_quantity > available_quantity:
+                        quantity_to_purchase = parts_quantity - available_quantity
+                        requested_by = assigned_technician or requestercomments or "unknown"
+
+                        # 🔒 Check for existing active purchase request
+                        cur.execute("""
+                            SELECT 1 FROM purchase_history
+                            WHERE part = %s AND client_id = %s
+                            AND purchase_order_status IN ('Waiting for approval', 'Created')
+                            LIMIT 1
+                        """, (parts_needed, client_id))
+                        existing = cur.fetchone()
+
+                        if not existing:
+                            cur.execute("""
+                                INSERT INTO purchase_history (
+                                    part, requested_quantity, requested_by,
+                                    purchase_order_status, approval_status, client_id, requested_date
+                                )
+                                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                            """, (
+                                parts_needed, 100 - available_quantity, requested_by,
+                                'Waiting for approval' if approval_required == 'required' else 'Created',
+                                'Pending' if approval_required == 'required' else 'Approved',
+                                client_id
+                            ))
+
+                            conn.commit()
+
+                            if approval_required == 'required':
+                                send_email(
+                                    subject="🛒 Purchase Request Approval Needed",
+                                    message=f"A request for {quantity_to_purchase} unit(s) of '{parts_needed}' has been submitted and needs approval."
+                                )
+
+                            return {
+                                "success": False,
+                                "error": f"❌ Only {available_quantity} '{parts_needed}' in stock.\n"
+                                        f"📦 Purchase request created (approval: {approval_required})."
+                            }
+
+                        else:
+                            return {
+                                "success": False,
+                                "error": f"⚠️ Only {available_quantity} '{parts_needed}' in stock.\n"
+                                        f"🔄 Existing purchase request already in progress. No new request created."
+                            }
+
+                # 3. Work order can be updated
+                cur.execute("""
                     UPDATE work_order
                     SET wo_description = %s,
                         WO_Type = %s,
@@ -494,51 +764,72 @@ class AssetService:
                         work_order_status = %s,
                         work_activity_description = %s
                     WHERE wo_number = %s AND client_id = %s
-                    """,
-                    (
-                        wo_description, wo_type, wo_priority, assignedtodept,
-                        dateneeded, assigned_technician, requestercomments, parts_needed, parts_quantity, work_order_status,
-                        work_activity_description, wo_number, client_id
-                    )
-                )
-                # ✅ 3. PARTS INVENTORY CHECK & DEDUCT
+                """, (
+                    wo_description, wo_type, wo_priority, assignedtodept,
+                    dateneeded, assigned_technician, requestercomments,
+                    parts_needed, parts_quantity, work_order_status,
+                    work_activity_description, wo_number, client_id
+                ))
+
+                # 4. Deduct quantity from parts
                 if parts_needed and parts_needed.lower() != "not required":
-                    cur.execute(
-                        "SELECT available_quantity FROM parts WHERE part_name = %s",
-                        (parts_needed,)
-                    )
-                    row = cur.fetchone()
-                    if not row or row[0] < parts_quantity:
-                        return {
-                            "success": False,
-                            "error": f"Not enough stock for {parts_needed}. Available: {row[0] if row else 0}"
-                        }
-                    # Deduct parts
-                    cur.execute(
-                        "UPDATE parts SET available_quantity = available_quantity - %s WHERE part_name = %s",
-                        (parts_quantity, parts_needed)
-                    )
-                    # Automatically create purchase entry if Battery drops below 10
-                    if parts_needed == "Battery":
-                        cur.execute(
-                            "SELECT available_quantity FROM parts WHERE part_name = %s",
-                            (parts_needed,)
-                        )
-                        row = cur.fetchone()
-                        if row and row[0] < 10:
-                            available_quantity = row[0]
-                            quantity_to_purchase = 100 - available_quantity
-                            cur.execute(
-                                """
-                                INSERT INTO purchase_history (part_name, quantity_purchased)
-                                VALUES (%s, %s)
-                                """,
-                                (parts_needed, quantity_to_purchase)  # purchase 100 units
-                            )
+                    cur.execute("""
+                        UPDATE parts 
+                        SET available_quantity = GREATEST(available_quantity - %s, 0)
+                        WHERE part_name = %s AND client_id = %s
+                    """, (parts_quantity, parts_needed, client_id))
+
+                    # 5. Check threshold AFTER deduction and auto-trigger purchase request
+                    cur.execute("""
+                        SELECT available_quantity, purchase_order_approval 
+                        FROM parts 
+                        WHERE part_name = %s AND client_id = %s
+                    """, (parts_needed, client_id))
+                    updated_row = cur.fetchone()
+                    if updated_row:
+                        remaining_quantity, approval_required = updated_row
+                        approval_required = approval_required or 'not required'
+
+                        if remaining_quantity <= 10:
+                            # 🔒 Check again for existing active request before auto-trigger
+                            cur.execute("""
+                                SELECT 1 FROM purchase_history
+                                WHERE part = %s AND client_id = %s
+                                AND purchase_order_status IN ('Waiting for approval', 'Created')
+                                LIMIT 1
+                            """, (parts_needed, client_id))
+                            already_exists = cur.fetchone()
+
+                            if not already_exists:
+                                cur.execute("""
+                                    INSERT INTO purchase_history (
+                                        part, requested_quantity, requested_by,
+                                        purchase_order_status, approval_status, client_id, requested_date
+                                    )
+                                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                                """, (
+                                    parts_needed, 100 - remaining_quantity,
+                                    assigned_technician or requestercomments or "auto-trigger",
+                                    'Waiting for approval' if approval_required == 'required' else 'Created',
+                                    'Pending' if approval_required == 'required' else 'Approved',
+                                    client_id
+                                ))
+                                conn.commit()
+
+                                if approval_required == 'required':
+                                    send_email(
+                                        subject="🔔 Auto Purchase Triggered",
+                                        message=f"Stock for '{parts_needed}' dropped to {remaining_quantity}. "
+                                                f"Auto purchase request created. Waiting for your approval."
+                                    )
+
                 conn.commit()
                 return {"success": True}
+
         except Exception as e:
+            conn.rollback()
             return {"success": False, "error": str(e)}
+
         finally:
             self.db.put_connection(conn)
 
@@ -572,3 +863,5 @@ class AssetService:
                 return depts
         finally:
             self.db.put_connection(conn)
+    
+    

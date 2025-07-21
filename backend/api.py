@@ -1,6 +1,9 @@
+import json
+import os
 import tornado.web
 import tornado.escape
 from core import UserService, AssetService
+from types import SimpleNamespace
 
 class BaseApiHandler(tornado.web.RequestHandler):
     def initialize(self):
@@ -16,15 +19,16 @@ class BaseApiHandler(tornado.web.RequestHandler):
             auth_header = self.request.headers.get("Authorization")
             if auth_header and auth_header.startswith("Bearer "):
                 token = auth_header[7:]
+
         if not token:
             return None
-        try:
-            from core import UserService
-            return UserService.verify_jwt(token)
-        except Exception:
-            return None
 
-        
+        try:
+            return self.user_service.verify_jwt(token)
+        except Exception as e:
+            print("JWT decode failed:", e)
+            return None
+   
     async def get_user_context(self, email):
         conn = self.application.db.get_connection()
         try:
@@ -323,91 +327,94 @@ class AssetHandler(BaseApiHandler):
             "per_page": per_page
         })
 
-
-
-    async def post(self):
+    async def post(self): 
         user = self.get_current_user()
         if not user:
             self.set_status(401)
             self.write({"error": "Unauthorized"})
             return
-        client_id = user["client_id"]
 
+        client_id = user["client_id"]
         if not client_id:
             self.set_status(401)
             self.write({"error": "Unauthorized"})
             return
 
         try:
-            data = tornado.escape.json_decode(self.request.body)
-            tag_number = data.get("tag_number")
-            description = data.get("description")
-            type_desc = data.get("type_desc")
-            manufacturer_desc = data.get("manufacturer_desc")
-            model_num = data.get("model_num")
-            equ_model_name = data.get("equ_model_name")
-            orig_manufacturer_desc = data.get("orig_manufacturer_desc")
-            serial_num = data.get("serial_num")
-            equ_status_desc = data.get("equ_status_desc")
-            facility_id = data.get("facility_id")
+            tag_number = self.get_argument("tag_number")
+            facility_id = self.get_argument("facility_id")
+            description = self.get_argument("description", "")
+            type_desc = self.get_argument("type_desc", "")
+            manufacturer_desc = self.get_argument("manufacturer_desc", "")
+            model_num = self.get_argument("model_num", "")
+            equ_model_name = self.get_argument("equ_model_name", "")
+            orig_manufacturer_desc = self.get_argument("orig_manufacturer_desc", "")
+            serial_num = self.get_argument("serial_num", "")
+            equ_status_desc = self.get_argument("equ_status_desc", "")
+            udi_code = self.get_argument("udi_code", "")
+            guid = self.get_argument("guid", "")
 
-            if not all([tag_number, facility_id]):
+            if not tag_number or not facility_id:
                 self.set_status(400)
                 self.write({"error": "Missing required fields: tag_number, facility_id"})
                 return
 
+            # Step 1: Add the asset
             result = await self.asset_service.add_asset(
                 client_id, tag_number, description, type_desc, manufacturer_desc,
                 model_num, equ_model_name, orig_manufacturer_desc, serial_num,
-                equ_status_desc, facility_id
+                equ_status_desc, facility_id, udi_code, guid
             )
-            if result["success"]:
-                self.write({"message": "Asset created successfully"})
-            else:
+
+            if not result["success"]:
                 self.set_status(400)
                 self.write({"error": result["error"]})
-        except ValueError:
-            self.set_status(400)
-            self.write({"error": "Invalid JSON"})
+                return
+            self.write({"message": "Asset created successfully!"})
+
+        except Exception as e:
+            self.set_status(500)
+            self.write({"error": f"Server error: {str(e)}"})
 
     async def put(self, tag_number, facility_id):
-        
         user = self.get_current_user()
         if not user:
             self.set_status(401)
             self.write({"error": "Unauthorized"})
             return
-        client_id = user["client_id"]
 
+        client_id = user["client_id"]
         if not client_id:
             self.set_status(401)
             self.write({"error": "Unauthorized"})
             return
 
         try:
-            data = tornado.escape.json_decode(self.request.body)
-            description = data.get("description")
-            type_desc = data.get("type_desc")
-            manufacturer_desc = data.get("manufacturer_desc")
-            model_num = data.get("model_num")
-            equ_model_name = data.get("equ_model_name")
-            orig_manufacturer_desc = data.get("orig_manufacturer_desc")
-            serial_num = data.get("serial_num")
-            equ_status_desc = data.get("equ_status_desc")
+            description = self.get_body_argument("description", "")
+            type_desc = self.get_body_argument("type_desc", "")
+            manufacturer_desc = self.get_body_argument("manufacturer_desc", "")
+            model_num = self.get_body_argument("model_num", "")
+            equ_model_name = self.get_body_argument("equ_model_name", "")
+            orig_manufacturer_desc = self.get_body_argument("orig_manufacturer_desc", "")
+            serial_num = self.get_body_argument("serial_num", "")
+            equ_status_desc = self.get_body_argument("equ_status_desc", "")
+            udi_code = self.get_body_argument("udi_code", "")
+            guid = self.get_body_argument("guid", "")
 
             result = await self.asset_service.update_asset(
                 client_id, tag_number, facility_id, description, type_desc,
                 manufacturer_desc, model_num, equ_model_name, orig_manufacturer_desc,
-                serial_num, equ_status_desc
+                serial_num, equ_status_desc, udi_code, guid
             )
+
             if result["success"]:
                 self.write({"message": "Asset updated successfully"})
             else:
                 self.set_status(404 if result["error"] == "Asset not found" else 400)
                 self.write({"error": result["error"]})
-        except ValueError:
-            self.set_status(400)
-            self.write({"error": "Invalid JSON"})
+        except Exception as e:
+            self.set_status(500)
+            self.write({"error": f"Server error: {str(e)}"})
 
     async def delete(self, tag_number, facility_id):
         user = self.get_current_user()
@@ -428,6 +435,205 @@ class AssetHandler(BaseApiHandler):
         else:
             self.set_status(404 if result["error"] == "Asset not found" else 400)
             self.write({"error": result["error"]})
+
+class AssetEditHandler(BaseApiHandler):
+    def prepare(self):
+        pass
+
+    async def get(self):
+        tag = self.get_query_argument("tag_number")
+        facility = self.get_query_argument("facility_id")
+
+        service = AssetService(self.db)
+        client_id = self.get_current_user()["client_id"]
+        asset_data = await service.get_asset_by_tag_and_facility(client_id, tag, facility)
+
+        if asset_data:
+            from types import SimpleNamespace
+            self.render("asset_edit.html", asset=SimpleNamespace(**asset_data))
+        else:
+            self.write("Asset not found")
+
+    async def post(self):
+        try:
+            data = json.loads(self.request.body)
+        except json.JSONDecodeError:
+            self.set_status(400)
+            self.write({"success": False, "error": "Invalid JSON"})
+            return
+
+        tag = data.get("tag_number")
+        facility = data.get("facility_id")
+        client_id = self.get_current_user()["client_id"]
+        description = data.get("description")
+        type_desc = data.get("type_desc")
+        manufacturer_desc = data.get("manufacturer_desc")
+        model_num = data.get("model_num")
+        equ_model_name = data.get("equ_model_name")
+        orig_manufacturer_desc = data.get("orig_manufacturer_desc")
+        serial_num = data.get("serial_num")
+        equ_status_desc = data.get("equ_status_desc")
+        udi_code = data.get("udi_code")
+        guid = data.get("guid")
+
+        if not tag or not facility:
+            self.set_status(400)
+            self.write({"success": False, "error": "Missing tag_number or facility_id"})
+            return
+
+        service = AssetService(self.db)
+        result = await service.update_asset(
+            client_id, tag, facility,
+            description, type_desc, manufacturer_desc,
+            model_num, equ_model_name, orig_manufacturer_desc,
+            serial_num, equ_status_desc, udi_code, guid
+        )
+
+        if result["success"]:
+            self.write({"success": True})
+        else:
+            self.set_status(400)
+            self.write({"success": False, "error": result["error"]})
+
+class AssetDetailsHandler(BaseApiHandler):
+    def prepare(self):
+        pass
+
+    async def get(self):
+        tag = self.get_query_argument("tag_number")
+        facility = self.get_query_argument("facility_id")
+        client_id = self.get_current_user()["client_id"]
+
+        service = AssetService(self.db)
+        asset_data = await service.get_asset_by_tag_and_facility(client_id, tag, facility)
+
+        if asset_data:
+            from types import SimpleNamespace
+            self.render("asset_details.html", asset=SimpleNamespace(**asset_data))
+        else:
+            self.write("Asset not found")
+
+class AssetDeleteHandler(BaseApiHandler):
+    def prepare(self):
+        pass
+
+    async def get(self):
+        tag = self.get_query_argument("tag_number")
+        facility = self.get_query_argument("facility_id")
+        self.render("asset_delete.html", tag_number=tag, facility_id=facility)
+
+    async def post(self):
+        tag = self.get_body_argument("tag_number")
+        facility = self.get_body_argument("facility_id")
+        client_id = self.get_current_user()["client_id"]
+
+        service = AssetService(self.db)  
+        result = await service.delete_asset(client_id, tag, facility)
+
+
+        if result["success"]:
+            self.redirect("/view_assets")
+        else:
+            self.write(f"Error: {result['error']}")
+
+class UploadAssetImagesHandler(BaseApiHandler):
+    async def post(self):
+        user = self.get_current_user()
+        print("[UPLOAD] User:", user)
+
+        if not user:
+            print("[UPLOAD] No user — 401")
+            self.set_status(401)
+            self.write({"error": "Unauthorized"})
+            return
+
+        tag_number = self.get_argument("tag_number", None)
+        facility_id = self.get_argument("facility_id", None)
+        files = self.request.files.get("files", [])
+        descriptions = self.get_arguments("descriptions[]")
+        content_types = self.get_arguments("content_types[]")
+
+        print("[UPLOAD] Received:", len(files), "files")
+
+        if not files:
+            print("[UPLOAD] No files uploaded")
+            self.set_status(400)
+            self.write({"error": "No files uploaded."})
+            return
+
+        if len(files) != len(descriptions):
+            print("[UPLOAD] Mismatch descriptions/files")
+            self.set_status(400)
+            self.write({"error": "Each image must have a matching description."})
+            return
+
+        try:
+            for i, fileinfo in enumerate(files):
+                description = descriptions[i] if i < len(descriptions) else ""
+                content_type = content_types[i] if i < len(content_types) else fileinfo.get("content_type")
+
+                print(f"[UPLOAD] Calling upload_image_to_disk for file: {fileinfo['filename']}")
+                await self.asset_service.upload_image_to_disk(
+                    tag_number, facility_id, user["client_id"],
+                    fileinfo, description, content_type
+                )
+
+            print("[UPLOAD] Upload completed successfully")
+            self.write({"success": True})
+        except Exception as e:
+            print("[UPLOAD ERROR]:", e)
+            self.set_status(500)
+            self.write({"error": "Upload failed: " + str(e)})
+
+
+class GetAssetImagesHandler(BaseApiHandler):
+    async def get(self):
+        user = self.get_current_user()
+        tag_number = self.get_argument("tag_number")
+        facility_id = self.get_argument("facility_id")
+        images = self.asset_service.get_images_for_asset(tag_number, facility_id, user["client_id"])
+        self.write({"images": images})
+
+class DeleteAssetFileHandler(BaseApiHandler):
+    async def delete(self, file_id):
+        user = self.get_current_user()
+        if not user:
+            self.set_status(401)
+            self.write({"error": "Unauthorized"})
+            return
+
+        success = await self.asset_service.delete_asset_image(file_id, user["client_id"])
+        if success:
+            self.write({"success": True})
+        else:
+            self.set_status(400)
+            self.write({"error": "Delete failed: Asset not found"})
+
+class MediaFileHandler(BaseApiHandler):
+    async def get(self, image_id):
+        conn = self.application.db.get_connection()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT image_path, content_type FROM asset_images WHERE id = %s
+            """, (image_id,))
+            row = cur.fetchone()
+
+        if not row:
+            self.set_status(404)
+            self.write("File not found")
+            return
+
+        image_path, content_type = row
+        full_path = os.path.join("static", image_path)
+
+        if not os.path.exists(full_path):
+            self.set_status(404)
+            self.write("File not found on disk")
+            return
+
+        with open(full_path, "rb") as f:
+            self.set_header("Content-Type", content_type or "application/octet-stream")
+            self.write(f.read())
 
 class FacilityHandler(BaseApiHandler):
     async def get(self):
@@ -691,6 +897,29 @@ class ModifyWorkOrderHandler(BaseApiHandler):
             self.set_status(500)
             self.write({"error": "Internal server error"})
 
+class PartsHandler(BaseApiHandler):
+    async def get(self):
+        user = self.get_current_user()
+        if not user:
+            self.set_status(401)
+            self.finish({"error": "Unauthorized"})
+            return
+
+        client_id = user.get("client_id")
+
+        conn = self.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT part_name FROM parts WHERE client_id = %s ORDER BY part_name",
+                    (client_id,)
+                )
+                parts = [row[0] for row in cur.fetchall()]
+                self.write({"parts": parts})
+        finally:
+            self.db.put_connection(conn)
+
+
       
 class WorkOrderTypeHandler(BaseApiHandler):
     async def get(self):
@@ -716,7 +945,6 @@ class WorkOrderPriorityHandler(BaseApiHandler):
             return
 
         client_id = user["client_id"]  
-
 
         priorities = await self.asset_service.get_work_order_priorities()
         self.write({"work_order_priorities": priorities})
@@ -749,16 +977,24 @@ class PurchaseHistoryHandler(BaseApiHandler):
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT part_name, quantity_purchased, purchase_date
-                    FROM purchase_history
-                    ORDER BY purchase_date DESC
-                """)
+                SELECT id, part, requested_quantity, requested_date, requested_by,
+                    purchase_order_status, approval_status, decline_reason
+                FROM purchase_history
+                WHERE client_id = %s
+                ORDER BY requested_date DESC
+            """, (client_id,))
+
                 rows = cur.fetchall()
                 history = [
                     {
-                        "part_name": row[0],
-                        "quantity_purchased": row[1],
-                        "purchase_date": row[2].strftime("%Y-%m-%d %H:%M")
+                        "id": row[0],
+                        "part": row[1],
+                        "requested_quantity": row[2],
+                        "requested_date": row[3].strftime("%Y-%m-%d %H:%M") if row[3] else "",
+                        "requested_by": row[4],
+                        "purchase_order_status": row[5],
+                        "approval_status": row[6],
+                        "decline_reason": row[7]
                     }
                     for row in rows
                 ]
@@ -768,3 +1004,114 @@ class PurchaseHistoryHandler(BaseApiHandler):
             self.write({"error": str(e)})
         finally:
             self.application.db.put_connection(conn)
+
+
+class PurchaseApproveHandler(BaseApiHandler):
+    async def post(self, request_id):
+        user = self.get_current_user()
+        if not user:
+            self.set_status(401)
+            self.write({"error": "Unauthorized"})
+            return
+
+        conn = self.application.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                # 1. Update status to Created
+                cur.execute("""
+                    UPDATE purchase_history
+                    SET approval_status = 'Approved',
+                        purchase_order_status = 'Created'
+                    WHERE id = %s
+                """, (request_id,))
+                conn.commit()
+                # 2. (Optional) Send email to confirm creation (can be added later)
+                self.write({"success": True})
+        except Exception as e:
+            conn.rollback()
+            self.set_status(500)
+            self.write({"error": str(e)})
+        finally:
+            self.application.db.put_connection(conn)
+
+
+class PurchaseDeclineHandler(BaseApiHandler):
+    async def post(self, request_id):
+        user = self.get_current_user()
+        if not user:
+            self.set_status(401)
+            self.write({"error": "Unauthorized"})
+            return
+
+        try:
+            data = tornado.escape.json_decode(self.request.body)
+            reason = data.get("reason", "").strip()
+            if not reason:
+                self.set_status(400)
+                self.write({"error": "Decline reason is required."})
+                return
+        except Exception:
+            self.set_status(400)
+            self.write({"error": "Invalid request body."})
+            return
+
+        conn = self.application.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                # 1. Update status to Declined and save comment
+                cur.execute("""
+                    UPDATE purchase_history
+                    SET approval_status = 'Declined',
+                        purchase_order_status = 'Declined',
+                        decline_reason = %s
+                    WHERE id = %s
+                """, (reason, request_id))
+                conn.commit()
+                self.write({"success": True})
+        except Exception as e:
+            conn.rollback()
+            self.set_status(500)
+            self.write({"error": str(e)})
+        finally:
+            self.application.db.put_connection(conn)
+
+class PurchaseStatusUpdateHandler(BaseApiHandler):
+    async def post(self, request_id):
+        user = self.get_current_user()
+        if not user or user["role"] != "purchaser":
+            self.set_status(403)
+            self.write({"error": "Only purchasers can update status."})
+            return
+
+        try:
+            data = tornado.escape.json_decode(self.request.body)
+            status = data.get("status")
+
+            if status not in ['Waiting for approval', 'Created', 'In transit', 'Completed']:
+                self.set_status(400)
+                self.write({"error": "Invalid status."})
+                return
+
+            conn = self.application.db.get_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE purchase_history
+                        SET purchase_order_status = %s
+                        WHERE id = %s
+                    """, (status, request_id))
+                    conn.commit()
+                    self.write({"success": True})
+            finally:
+                self.application.db.put_connection(conn)
+
+        except Exception as e:
+            self.set_status(500)
+            self.write({"error": str(e)})
+
+
+
+
+
+
+

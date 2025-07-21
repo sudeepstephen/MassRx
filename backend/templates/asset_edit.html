@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Edit Asset</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f2f2f2;
+    }
+    .container {
+      max-width: 800px;
+      margin: 30px auto;
+      padding: 25px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h1 { text-align: center; margin-bottom: 25px; }
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; font-weight: bold; margin-bottom: 5px; }
+    .form-group input { width: 100%; padding: 8px; box-sizing: border-box; }
+    .preview-img { display: block; max-height: 100px; margin-top: 10px; }
+    .image-preview-container { margin-top: 20px; }
+    .image-preview-count { font-weight: bold; margin-bottom: 5px; }
+    .image-preview { display: flex; flex-wrap: wrap; gap: 10px; }
+    .image-box {
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 5px;
+      background-color: #f9f9f9;
+      position: relative;
+      width: 150px;
+    }
+    .image-box img { max-width: 100%; max-height: 100px; display: block; margin-bottom: 5px; }
+    .image-box input[type="text"] { width: 100%; font-size: 0.9em; margin-bottom: 5px; }
+    .image-box button {
+      background: red;
+      color: white;
+      border: none;
+      padding: 5px;
+      border-radius: 3px;
+      cursor: pointer;
+      position: absolute;
+      top: 5px;
+      right: 5px;
+    }
+  </style>
+</head>
+<body onload="fetchExistingFiles()">
+<div class="container">
+  <h1>Edit Asset</h1>
+  <form id="editAssetForm">
+    <div class="form-group"><label>Tag Number:</label><input type="text" name="tag_number" value="{{ asset.tag_number }}" required></div>
+    <div class="form-group"><label>Description:</label><input type="text" name="description" value="{{ asset.description }}"></div>
+    <div class="form-group"><label>Type Description:</label><input type="text" name="type_desc" value="{{ asset.type_desc }}"></div>
+    <div class="form-group"><label>Manufacturer Description:</label><input type="text" name="manufacturer_desc" value="{{ asset.manufacturer_desc }}"></div>
+    <div class="form-group"><label>Model Number:</label><input type="text" name="model_num" value="{{ asset.model_num }}"></div>
+    <div class="form-group"><label>Equipment Model Name:</label><input type="text" name="equ_model_name" value="{{ asset.equ_model_name }}"></div>
+    <div class="form-group"><label>Original Manufacturer Description:</label><input type="text" name="orig_manufacturer_desc" value="{{ asset.orig_manufacturer_desc }}"></div>
+    <div class="form-group"><label>Serial Number:</label><input type="text" name="serial_num" value="{{ asset.serial_num }}"></div>
+    <div class="form-group"><label>UDI Code:</label><input type="text" name="udi_code" value="{{ asset.udi_code }}"></div>
+    <div class="form-group"><label>GUID:</label><input type="text" name="guid" value="{{ asset.guid }}"></div>
+    <div class="form-group"><label>Equipment Status Description:</label><input type="text" name="equ_status_desc" value="{{ asset.equ_status_desc }}"></div>
+    <div class="form-group"><label>Facility ID:</label><input type="text" name="facility_id" value="{{ asset.facility_id }}" required></div>
+    
+    <div class="modal" id="fileModal">
+      <div class="modal-content">
+        <div id="modalViewer"></div>
+        <div class="file-count" id="fileCounter"></div>
+        <div class="modal-nav">
+          <button onclick="prevFile()">⟨ Prev</button>
+          <button onclick="nextFile()">Next ⟩</button>
+          <button onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <hr>
+    <div class="form-group">
+      <label>Upload File:</label>
+      <input type="file" id="imageInput" accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx">
+      <input list="descOptions" id="imageDescription" placeholder="Enter or choose description" />
+      <datalist id="descOptions">
+        <option value="Tag Picture">
+        <option value="Serial Number Picture">
+        <option value="Equipment Picture">
+        <option value="Manufacturer Picture">
+        <option value="Data Picture">
+      </datalist>
+      <div id="livePreview" class="preview-img" style="display:none;"></div>
+      <button type="button" onclick="handleImageUpload()">Add File</button>
+    </div>
+
+    <div class="image-preview-container" id="imagePreviewContainer" style="display: none;">
+      <label>New Files to Upload:</label>
+      <div class="image-preview-count" id="imageCount"></div>
+      <div class="image-preview" id="imagePreview"></div>
+    </div>
+
+    <div class="image-preview-container" id="existingPreviewContainer" style="margin-top: 30px;">
+      <label>Uploaded Files:</label>
+      <div class="image-preview" id="existingPreview"></div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+      <button type="submit" onclick="assetManuallyUpdated = true" style="background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 5px;">Update Asset</button>
+      <a href="/view_assets" style="text-decoration: none;">
+        <button id="backToAssets" type="button" style="background-color: #6c757d; color: white; padding: 10px 15px; border: none; border-radius: 5px;">Back to Assets</button>
+      </a>
+    </div>
+  </form>
+</div>
+
+<script>
+  let existingFiles = [];
+  let currentIndex = 0;
+  let formModified = false;
+  let assetManuallyUpdated = false;
+  const tagNumber = "{{ asset.tag_number }}";
+  const facilityId = "{{ asset.facility_id }}";
+  const token = localStorage.getItem("token");
+  const headers = { Authorization: "Bearer " + token };
+  const imageFiles = [];
+
+  document.getElementById("imageInput").addEventListener("change", function () {
+    const file = this.files[0];
+    const preview = document.getElementById("livePreview");
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const preview = document.getElementById("livePreview");
+        const type = file.type;
+
+        if (type.startsWith("image/")) {
+          preview.src = e.target.result;
+          preview.style.display = "block";
+          preview.type = "image";
+        } else if (type === "application/pdf") {
+          preview.style.display = "block";
+          preview.outerHTML = `<iframe id="livePreview" src="${e.target.result}" width="100%" height="100px" style="display:block;"></iframe>`;
+        } else if (type.startsWith("text/") || type.includes("wordprocessingml") || type.includes("spreadsheetml")) {
+          preview.style.display = "block";
+          preview.outerHTML = `<div id="livePreview"><a href="${e.target.result}" download="${file.name}">Preview Available After Upload</a></div>`;
+        } else {
+          preview.style.display = "block";
+          preview.outerHTML = `<div id="livePreview">Unknown file type</div>`;
+        }
+      };
+      reader.readAsDataURL(file);
+    } else {
+      document.getElementById("livePreview").style.display = "none";
+    }
+
+  });
+
+  function handleImageUpload() {
+    const fileInput = document.getElementById("imageInput");
+    const descInput = document.getElementById("imageDescription");
+    const file = fileInput.files[0];
+    formModified = true;
+    const description = descInput.value.trim();
+    if (!file || !description) {
+      alert("Please select a file and enter a description.");
+      return;
+    }
+
+    const imageId = Date.now();
+    imageFiles.push({ file, description, id: imageId });
+    renderImages();
+    fileInput.value = "";
+    descInput.value = "";
+    document.getElementById("livePreview").style.display = "none";
+  }
+
+  function renderImages() {
+    const previewDiv = document.getElementById("imagePreview");
+    const imageCount = document.getElementById("imageCount");
+    const container = document.getElementById("imagePreviewContainer");
+    previewDiv.innerHTML = "";
+
+    if (imageFiles.length > 0) {
+      container.style.display = "block";
+      imageCount.textContent = `${imageFiles.length} file(s) added`;
+    } else {
+      container.style.display = "none";
+    }
+
+    imageFiles.forEach(img => {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const box = document.createElement("div");
+        box.className = "image-box";
+
+        const type = img.file.type;
+        let previewContent = "";
+
+        if (type.startsWith("image/")) {
+          previewContent = `<img src="${e.target.result}" alt="preview">`;
+        } else if (type === "application/pdf") {
+          previewContent = `<iframe src="${e.target.result}" width="100%" height="100px"></iframe>`;
+        } else if (
+          type.startsWith("text/") ||
+          type.includes("wordprocessingml") ||
+          type.includes("spreadsheetml")
+        ) {
+          previewContent = `<div style="font-size: 0.9em;">${img.file.name}</div>`;
+        } else {
+          previewContent = `<div>Unknown file type</div>`;
+        }
+
+        box.innerHTML = `
+          ${previewContent}
+          <input type="text" value="${img.description}" disabled>
+          <button onclick="removeImage(${img.id})">X</button>
+        `;
+        previewDiv.appendChild(box);
+      };
+      reader.readAsDataURL(img.file);
+    });
+  }
+
+
+  function removeImage(id) {
+    const index = imageFiles.findIndex(img => img.id === id);
+    formModified = true;
+    if (index > -1) imageFiles.splice(index, 1);
+    renderImages();
+  }
+
+  async function fetchExistingFiles() {
+    const res = await fetch(`/api/assets/images?tag_number=${tagNumber}&facility_id=${facilityId}`, { headers });
+    const data = await res.json();
+    const existingDiv = document.getElementById("existingPreview");
+    existingDiv.innerHTML = "";
+    existingFiles = data.images || [];
+
+    existingFiles.forEach((file, i) => {
+      const box = document.createElement("div");
+      box.className = "image-box";
+
+      let preview = "";
+
+      if (file.content_type && file.content_type.startsWith("image/")) {
+        preview = `<img src="${file.url}" alt="preview" onclick="openModal(${i})">`;
+      } else if (file.content_type === "application/pdf") {
+        preview = `
+        <iframe src="${file.url}" width="100%" height="100px" onclick="openModal(${i})"></iframe>
+        <div><a href="${file.url}" download="${file.filename || 'file'}">Download PDF</a></div>
+      `;
+
+      } else if (
+        file.content_type === "text/plain" ||
+        file.content_type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+        file.content_type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      ) {
+        preview = `
+          <div class="file-icon" onclick="openModal(${i})">📄</div>
+          <div><a href="${file.url}" download="${file.filename || 'file'}">Download File</a></div>
+        `;
+      } else {
+        preview = `
+          <div class="file-icon" onclick="openModal(${i})">📎</div>
+          <div><a href="${file.url}" download="${file.filename || 'file'}">Download File</a></div>
+        `;
+      }
+
+      box.innerHTML = `
+        ${preview}
+        <div class="desc">${file.description || "No description"}</div>
+      `;
+
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "X";
+      delBtn.onclick = () => deleteFile(file.url);
+      box.appendChild(delBtn);
+
+      existingDiv.appendChild(box);
+    });
+  }
+
+
+
+  function deleteFile(url) {
+    const idMatch = url.match(/\/media\/(\d+)/);
+    if (!idMatch) {
+      alert("Could not extract file ID.");
+      return;
+    }
+    const id = idMatch[1];
+    if (!confirm("Are you sure you want to delete this file?")) return;
+
+    fetch(`/api/assets/delete_file/${id}`, {
+      method: "DELETE",
+      headers,
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        fetchExistingFiles();
+        alert("Image deleted successfully!");  
+      } else {
+        alert("Delete failed: " + (data.error || "Unknown error"));
+      }
+    })
+    .catch(() => alert("Delete request failed."));
+  }
+
+
+ document.getElementById("editAssetForm").addEventListener("submit", async function (e) {
+  e.preventDefault();
+
+  const formData = new FormData(e.target);
+  const assetData = {};
+  formData.forEach((value, key) => { assetData[key] = value; });
+
+  // Update asset data
+  const updateRes = await fetch("/asset_edit", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify(assetData),
+  });
+
+  const updateResult = await updateRes.json();
+  if (!updateResult.success) {
+    alert("Asset update failed");
+    return;
+  }
+
+  // Upload files
+  let uploadFailures = [];
+  for (const image of imageFiles) {
+    const uploadForm = new FormData();
+    uploadForm.append("tag_number", tagNumber);
+    uploadForm.append("facility_id", facilityId);
+    uploadForm.append("files", image.file);
+    uploadForm.append("content_types", image.file.type); 
+    uploadForm.append("descriptions", image.description);
+
+    try {
+      const res = await fetch("/api/assets/upload_images", {
+        method: "POST",
+        headers,
+        body: uploadForm
+      });
+      const result = await res.json();
+      if (!result || result.success !== true) {
+        uploadFailures.push(result);
+      }
+    } catch (err) {
+      uploadFailures.push({ error: err.message });
+    }
+  }
+
+  // Reset file state and reload
+  imageFiles.length = 0;
+  renderImages();
+  fetchExistingFiles();
+
+  // Show alert messages
+  if (uploadFailures.length > 0) {
+    alert("Some images failed to upload.");
+  } else {
+    if (assetManuallyUpdated) {
+      alert("Asset updated successfully!");
+      assetManuallyUpdated = false;  // reset flag
+      formModified = false; // Reset formModified so popup won't show again
+    }
+  }
+
+});
+document.querySelectorAll("#editAssetForm input, #editAssetForm select, #editAssetForm textarea").forEach(el => {
+  el.addEventListener("change", () => {
+    formModified = true;
+  });
+});
+
+document.getElementById("backToAssets").addEventListener("click", async () => {
+  if (formModified) {
+    const confirmSave = confirm("You have unsaved changes. Do you want to save before leaving?");
+    if (confirmSave) {
+      assetManuallyUpdated = true;
+      document.getElementById("editAssetForm").requestSubmit();  // triggers form submission
+      setTimeout(() => {
+        formModified = false;
+        window.location.href = "/view_assets";
+      }, 1000);  // slight delay to ensure async work finishes
+    } else {
+      window.location.href = "/view_assets";
+    }
+  } else {
+    window.location.href = "/view_assets";
+  }
+});
+function openModal(index) {
+  currentIndex = index;
+  const viewer = document.getElementById("modalViewer");
+  const counter = document.getElementById("fileCounter");
+  const file = existingFiles[currentIndex];
+  viewer.innerHTML = "";
+
+  const descriptionHTML = `<div style="margin-bottom: 10px; font-weight: bold;">${file.description || "No description"}</div>`;
+  let previewHTML = "";
+
+  if (file.content_type && file.content_type.startsWith("image/")) {
+    previewHTML = `<img src="${file.url}" style="max-width:100%; max-height:100%;" />`;
+  } else if (file.content_type === "application/pdf") {
+    previewHTML = `<iframe src="${file.url}" width="100%" height="400px"></iframe>`;
+  } else if (
+    file.content_type === "text/plain" ||
+    file.content_type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    file.content_type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  ) {
+    previewHTML = `
+      <div style="text-align:center;">
+        <strong>${file.filename || "File"}</strong><br>
+        <a href="${file.url}" download>Download File</a>
+      </div>
+    `;
+  } else {
+    previewHTML = `
+      <div style="text-align:center;">
+        <strong>Unknown File Type</strong><br>
+        <a href="${file.url}" download>Download</a>
+      </div>
+    `;
+  }
+
+  viewer.innerHTML = descriptionHTML + previewHTML;
+  counter.textContent = `${currentIndex + 1} / ${existingFiles.length}`;
+  document.getElementById("fileModal").style.display = "flex";
+}
+
+function closeModal() {
+  document.getElementById("fileModal").style.display = "none";
+}
+
+function prevFile() {
+  if (!existingFiles.length) return;
+  currentIndex = (currentIndex - 1 + existingFiles.length) % existingFiles.length;
+  openModal(currentIndex);
+}
+
+function nextFile() {
+  if (!existingFiles.length) return;
+  currentIndex = (currentIndex + 1) % existingFiles.length;
+  openModal(currentIndex);
+}
+
+</script>
+</body>
+</html>

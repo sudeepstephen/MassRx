@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Delete Asset</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    /* Container styling similar to your Create Work Order page */
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f7f7f7;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 40px auto;
+      background: #fff;
+      padding: 30px 40px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 25px;
+      color: #333;
+    }
+    p {
+      font-size: 1.1em;
+      margin-bottom: 30px;
+      color: #555;
+    }
+    form button {
+      background-color: #d9534f; /* bootstrap danger red */
+      color: white;
+      padding: 12px 25px;
+      border: none;
+      border-radius: 4px;
+      font-size: 1em;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      margin-right: 15px;
+    }
+    form button:hover {
+      background-color: #c9302c;
+    }
+    a {
+      font-size: 1em;
+      color: #007bff;
+      text-decoration: none;
+      vertical-align: middle;
+      padding: 12px 20px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+    a:hover {
+      background-color: #e9ecef;
+      border-color: #007bff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Delete Asset</h1>
+    <p>Are you sure you want to delete asset <strong>{{ tag_number }}</strong> at facility <strong>{{ facility_id }}</strong>?</p>
+    <form method="POST">
+      <input type="hidden" name="tag_number" value="{{ tag_number }}">
+      <input type="hidden" name="facility_id" value="{{ facility_id }}">
+      <button type="submit">Confirm Delete</button>
+      <a href="/view_assets">Cancel</a>
+    </form>
+  </div>
+</body>
+</html>

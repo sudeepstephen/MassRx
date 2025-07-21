@@ -1,56 +1,341 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Purchase History</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8">
+  <title>Purchase Requests</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .container {
+      max-width: 1000px;
+      margin: 30px auto;
+      padding: 20px;
+      font-family: 'Segoe UI', Arial, sans-serif;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    th, td {
+      padding: 12px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+
+    th {
+      background-color: #3498db;
+      color: white;
+    }
+
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+
+    textarea {
+      resize: vertical;
+      width: 100%;
+    }
+
+    .nav-links {
+      display: flex;
+      justify-content: center;
+      margin-top: 30px;
+    }
+
+    .nav-button {
+      display: inline-block;
+      padding: 10px 20px;
+      background-color: #3498db;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      font-weight: 600;
+      transition: background-color 0.3s ease;
+      cursor: pointer;
+    }
+
+    .nav-button:hover {
+      background-color: #2980b9;
+    }
+
+    .btn-accept {
+      background-color: #2ecc71;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    .btn-accept:hover {
+      background-color: #27ae60;
+    }
+
+    .btn-decline {
+      background-color: #e74c3c;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    .btn-decline:hover {
+      background-color: #c0392b;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    #declineModal {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  padding: 25px;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  z-index: 1000;
+  width: 400px;
+  max-width: 90%;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+#declineModal h3 {
+  margin-top: 0;
+  font-size: 20px;
+  color: #333;
+}
+
+#declineReason {
+  width: 100%;
+  height: 100px;
+  margin-top: 10px;
+  padding: 10px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.modal-button-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 15px;
+}
+
+.btn-submit {
+  background-color: #27ae60;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.btn-submit:hover {
+  background-color: #219150;
+}
+
+.btn-cancel {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.btn-cancel:hover {
+  background-color: #c0392b;
+}
+
+    
+
+    select.status-dropdown {
+      padding: 4px;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
 <div class="container">
-    <h1>Purchase History</h1>
-    <table>
-        <thead>
-            <tr>
-                <th>Part Name</th>
-                <th>Quantity Purchased</th>
-                <th>Purchase Date</th>
-            </tr>
-        </thead>
-        <tbody id="historyTableBody">
-            <!-- Populated by JS -->
-        </tbody>
-    </table>
-    <p><a href="/dashboard">Back to Dashboard</a></p>
+  <h1>Purchase Requests</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Part</th>
+        <th>Requested Quantity</th>
+        <th>Requested Date</th>
+        <th>Requested By</th>
+        <th>Purchase Order Status</th>
+        <th>Decline Reason</th>
+        <th>Approval</th>
+      </tr>
+    </thead>
+    <tbody id="historyTableBody"></tbody>
+  </table>
+
+  <div class="nav-links">
+    <a href="/dashboard" class="nav-button">Back to Dashboard</a>
+  </div>
+</div>
+
+<!-- Decline Modal -->
+<div id="declineModal">
+  <h3>Decline Reason</h3>
+  <textarea id="declineReason" placeholder="Enter reason..."></textarea>
+  <div class="modal-button-row">
+    <button class="btn-submit" onclick="submitDecline()">Submit Decline</button>
+    <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+  </div>
 </div>
 
 <script>
-    async function fetchPurchaseHistory() {
-        try {
-            const response = await fetch("/api/purchase_history");
-            const data = await response.json();
-            const tbody = document.getElementById("historyTableBody");
-            tbody.innerHTML = "";
+  let userRole = null;
+  let selectedRequestId = null;
 
-            if (data.history && data.history.length > 0) {
-                data.history.forEach(entry => {
-                    const row = document.createElement("tr");
-                    row.innerHTML = `
-                        <td>${entry.part_name}</td>
-                        <td>${entry.quantity_purchased}</td>
-                        <td>${entry.purchase_date}</td>
-                    `;
-                    tbody.appendChild(row);
-                });
-            } else {
-                tbody.innerHTML = "<tr><td colspan='3'>No purchase history found.</td></tr>";
-            }
-        } catch (error) {
-            console.error("Failed to load purchase history:", error);
-            alert("Error loading purchase history.");
-        }
+  async function authFetch(url, options = {}) {
+    const token = localStorage.getItem("token");
+    return fetch(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      }
+    });
+  }
+
+  async function fetchUser() {
+    const res = await authFetch('/api/me');
+    const data = await res.json();
+    userRole = data.role;
+  }
+
+  async function fetchPurchaseHistory() {
+    await fetchUser();
+
+    const response = await authFetch("/api/purchase_history");
+    const result = await response.json();
+
+    const tbody = document.getElementById("historyTableBody");
+    tbody.innerHTML = "";
+
+    if (result.history && result.history.length > 0) {
+      result.history.forEach(entry => {
+        const row = document.createElement("tr");
+
+        const showButtons = userRole === 'purchaser' && entry.purchase_order_status === 'Waiting for approval';
+        const isPurchaser = userRole === 'purchaser';
+
+        row.innerHTML = `
+          <td>${entry.part}</td>
+          <td>${entry.requested_quantity}</td>
+          <td>${entry.requested_date || ''}</td>
+          <td>${entry.requested_by || ''}</td>
+          <td>
+            ${isPurchaser ? `
+              <select class="status-dropdown" onchange="updateStatus(${entry.id}, this.value)">
+                <option value="Waiting for approval" ${entry.purchase_order_status === 'Waiting for approval' ? 'selected' : ''}>Waiting for approval</option>
+                <option value="Created" ${entry.purchase_order_status === 'Created' ? 'selected' : ''}>Created</option>
+                <option value="In transit" ${entry.purchase_order_status === 'In transit' ? 'selected' : ''}>In transit</option>
+                <option value="Completed" ${entry.purchase_order_status === 'Completed' ? 'selected' : ''}>Completed</option>
+              </select>
+            ` : entry.purchase_order_status}
+          </td>
+          <td>${entry.decline_reason || ""}</td>
+          <td>
+            ${showButtons ? `
+              <div class="action-buttons">
+                <button class="btn-accept" onclick="approve(${entry.id})">Accept</button>
+                <button class="btn-decline" onclick="openModal(${entry.id})">Decline</button>
+              </div>
+            ` : (entry.approval_status || "")}
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    } else {
+      tbody.innerHTML = "<tr><td colspan='7'>No purchase requests found.</td></tr>";
+    }
+  }
+
+  function openModal(id) {
+    selectedRequestId = id;
+    document.getElementById("declineReason").value = "";
+    document.getElementById("declineModal").style.display = "block";
+  }
+
+  function closeModal() {
+    selectedRequestId = null;
+    document.getElementById("declineModal").style.display = "none";
+  }
+
+  async function submitDecline() {
+    const reason = document.getElementById("declineReason").value.trim();
+    if (!reason) {
+      alert("Decline reason is mandatory.");
+      return;
     }
 
-    window.onload = fetchPurchaseHistory;
+    const res = await authFetch(`/api/purchase_decline/${selectedRequestId}`, {
+      method: "POST",
+      body: JSON.stringify({ reason })
+    });
+
+    if (res.ok) {
+      closeModal();
+      fetchPurchaseHistory();
+    } else {
+      const data = await res.json();
+      alert("Failed to decline: " + data.error);
+    }
+  }
+
+  async function approve(id) {
+    const res = await authFetch(`/api/purchase_approve/${id}`, {
+      method: "POST"
+    });
+
+    if (res.ok) {
+      fetchPurchaseHistory();
+    } else {
+      const data = await res.json();
+      alert("Failed to approve: " + data.error);
+    }
+  }
+
+  async function updateStatus(id, newStatus) {
+    const res = await authFetch(`/api/purchase_status/${id}`, {
+      method: "POST",
+      body: JSON.stringify({ status: newStatus })
+    });
+
+    if (res.ok) {
+      fetchPurchaseHistory();
+    } else {
+      const data = await res.json();
+      alert("Failed to update status: " + data.error);
+    }
+  }
+
+  window.onload = fetchPurchaseHistory;
 </script>
 </body>
 </html>

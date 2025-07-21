@@ -1,169 +1,351 @@
-<script>
-function authFetch(url, options = {}) {
-    const token = localStorage.getItem('token');
-    const headers = {
-        ...(options.headers || {}),
-        'Authorization': `Bearer ${token}`,
-    };
-
-    // Add Content-Type only for POST/PUT if not already present
-    if ((options.method === 'POST' || options.method === 'PUT') &&
-        !headers['Content-Type']) {
-        headers['Content-Type'] = 'application/json';
-    }
-
-    return fetch(url, {
-        ...options,
-        headers
-    });
-}
-
-</script>
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Add Asset</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <style>
-        .form-group {
-            margin-bottom: 15px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-        }
-        .form-group input {
-            width: 100%;
-            padding: 8px;
-            box-sizing: border-box;
-        }
-        button {
-            padding: 10px 20px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #218838;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Add Asset</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+    }
+    .container {
+      max-width: 800px;
+      margin: 40px auto;
+      background: #fff;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 { text-align: center; margin-bottom: 20px; }
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 5px; }
+    .form-group input, .form-group textarea {
+      width: 100%; padding: 8px; box-sizing: border-box;
+    }
+    .preview-img {
+      display: block;
+      max-height: 100px;
+      margin-top: 10px;
+    }
+    .image-preview-container { margin-top: 20px; }
+    .image-preview-count {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .image-preview {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .image-box {
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 5px;
+      background-color: #f9f9f9;
+      position: relative;
+      width: 150px;
+    }
+    .image-box img {
+      max-width: 100%;
+      max-height: 100px;
+      display: block;
+      margin-bottom: 5px;
+    }
+    .image-box input[type="text"] {
+      width: 100%;
+      font-size: 0.9em;
+      margin-bottom: 5px;
+    }
+    .image-box button {
+      background: red;
+      color: white;
+      border: none;
+      padding: 5px;
+      border-radius: 3px;
+      cursor: pointer;
+      position: absolute;
+      top: 5px;
+      right: 5px;
+    }
+    .success-msg {
+      color: green;
+      font-size: 0.85em;
+    }
+  </style>
 </head>
 <body>
-    <div class="container" style="margin-top: 10px;">
-        <h1>Add New Asset</h1>
-        <form id="addAssetForm">
-            <div class="form-group">
-                <label for="tag_number">Tag Number:</label>
-                <input type="text" id="tag_number" name="tag_number" required>
-            </div>
-            <div class="form-group">
-                <label for="description">Description:</label>
-                <input type="text" id="description" name="description">
-            </div>
-            <div class="form-group">
-                <label for="type_desc">Type Description:</label>
-                <input type="text" id="type_desc" name="type_desc">
-            </div>
-            <div class="form-group">
-                <label for="manufacturer_desc">Manufacturer Description:</label>
-                <input type="text" id="manufacturer_desc" name="manufacturer_desc">
-            </div>
-            <div class="form-group">
-                <label for="model_num">Model Number:</label>
-                <input type="text" id="model_num" name="model_num">
-            </div>
-            <div class="form-group">
-                <label for="equ_model_name">Equipment Model Name:</label>
-                <input type="text" id="equ_model_name" name="equ_model_name">
-            </div>
-            <div class="form-group">
-                <label for="orig_manufacturer_desc">Original Manufacturer Description:</label>
-                <input type="text" id="orig_manufacturer_desc" name="orig_manufacturer_desc">
-            </div>
-            <div class="form-group">
-                <label for="serial_num">Serial Number:</label>
-                <input type="text" id="serial_num" name="serial_num">
-            </div>
-            <div class="form-group">
-                <label for="equ_status_desc">Equipment Status Description:</label>
-                <input type="text" id="equ_status_desc" name="equ_status_desc">
-            </div>
-            <div class="form-group">
-                <label for="facility_id">Facility ID:</label>
-                <input type="text" id="facility_id" name="facility_id" required>
-            </div>
-            <button type="submit">Add Asset</button>
-        </form>
-        <p><a href="/view_assets">View Assets</a> | <a href="/">Back to Login</a></p>
+<div class="container">
+  <h1>Add New Asset</h1>
+  <form id="addAssetForm">
+    <div class="form-group"><label>Tag Number:</label><input type="text" name="tag_number" required></div>
+    <div class="form-group"><label>Description:</label><input type="text" name="description"></div>
+    <div class="form-group"><label>Type Description:</label><input type="text" name="type_desc"></div>
+    <div class="form-group"><label>Manufacturer Description:</label><input type="text" name="manufacturer_desc"></div>
+    <div class="form-group"><label>Model Number:</label><input type="text" name="model_num"></div>
+    <div class="form-group"><label>Equipment Model Name:</label><input type="text" name="equ_model_name"></div>
+    <div class="form-group"><label>Original Manufacturer Description:</label><input type="text" name="orig_manufacturer_desc"></div>
+    <div class="form-group"><label>Serial Number:</label><input type="text" name="serial_num"></div>
+    <div class="form-group"><label>UDI Code:</label><input type="text" name="udi_code" placeholder="Leave empty to auto-generate"></div>
+    <div class="form-group"><label>GUID:</label><input type="text" name="guid" placeholder="Leave empty to auto-generate"></div>
+    <div class="form-group"><label>Equipment Status Description:</label><input type="text" name="equ_status_desc"></div>
+    <div class="form-group"><label>Facility ID:</label><input type="text" name="facility_id" required></div>
+    <hr>
+    <!-- Upload image -->
+    <div class="form-group">
+      <label>Upload Image:</label>
+      <input type="file" id="imageInput" accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx">
+      <input list="descOptions" id="imageDescription" placeholder="Enter or choose description" />
+      <datalist id="descOptions">
+        <option value="Tag Picture">
+        <option value="Serial Number Picture">
+        <option value="Equipment Picture">
+        <option value="Manufacturer Picture">
+        <option value="Data Picture">
+      </datalist>
+      <div id="livePreview" class="preview-box" style="display:none; border: 1px solid #ccc; margin-top: 10px; padding: 10px;"></div>
+      <button type="button" onclick="handleImageUpload()">Add File</button>
     </div>
-    <script>
-        document.getElementById('addAssetForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData.entries());
-            for (const key in data) {
-                if (data[key] === '') {
-                    data[key] = null;
-                }
-            }
-            try {
-                const response = await authFetch('/api/assets', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    alert(result.message);
-                    e.target.reset();
-                } else {
-                    alert(result.error);
-                }
-            } catch (err) {
-                alert('Error: ' + err.message);
-            }
-        });
-    </script>
+
+    <!-- Image preview -->
+    <div class="image-preview-container" id="imagePreviewContainer" style="display: none;">
+      <label>Uploaded Images:</label>
+      <div class="image-preview-count" id="imageCount"></div>
+      <div class="image-preview" id="imagePreview"></div>
+    </div>
+
+
+    <br>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+      <button type="submit" style="background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 5px;">Submit Asset</button>
+      <a href="/view_assets" style="text-decoration: none;">
+        <button type="button" style="background-color: #6c757d; color: white; padding: 10px 15px; border: none; border-radius: 5px;">Back to Assets</button>
+      </a>
+    </div>
+
+  </form>
+
+  <div id="backBtnContainer" style="text-align: center; margin-top: 20px;"></div>
+</div>
+
+<script> 
+  const imageFiles = [];
+
+  // Live preview
+  document.getElementById("imageInput").addEventListener("change", function () {
+    const file = this.files[0];
+    const preview = document.getElementById("livePreview");
+
+    if (!file) {
+      preview.style.display = "none";
+      return;
+    }
+
+    const fileType = file.type;
+    const reader = new FileReader();
+
+    reader.onload = function (e) {
+      preview.innerHTML = "";
+
+      if (fileType.startsWith("image/")) {
+        const img = document.createElement("img");
+        img.src = e.target.result;
+        img.style.maxWidth = "100%";
+        img.style.maxHeight = "200px";
+        preview.appendChild(img);
+      } else if (fileType === "application/pdf") {
+        const iframe = document.createElement("iframe");
+        iframe.src = e.target.result;
+        iframe.style.width = "100%";
+        iframe.style.height = "200px";
+        preview.appendChild(iframe);
+      } else if (
+        fileType === "text/plain" ||
+        fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+        fileType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      ) {
+        const name = document.createElement("div");
+        name.innerHTML = `<strong>${file.name}</strong><br><a href="${e.target.result}" download="${file.name}">Download File</a>`;
+        preview.appendChild(name);
+      } else {
+        const fallback = document.createElement("div");
+        fallback.innerHTML = `<strong>Unsupported File Type</strong><br><a href="${e.target.result}" download="${file.name}">Download ${file.name}</a>`;
+        preview.appendChild(fallback);
+      }
+
+      preview.style.display = "block";
+    };
+
+    reader.readAsDataURL(file);
+  });
+
+  function handleImageUpload() {
+    const fileInput = document.getElementById("imageInput");
+    const descInput = document.getElementById("imageDescription");
+    const file = fileInput.files[0];
+    const description = descInput.value.trim();
+
+    if (!file || !description) {
+      alert("Please select an image and enter a description.");
+      return;
+    }
+
+    const imageId = Date.now();
+    imageFiles.push({ file, description, id: imageId, contentType: file.type });
+
+    renderImages();
+    fileInput.value = "";
+    descInput.value = "";
+    document.getElementById("livePreview").style.display = "none";
+  }
+
+  function renderImages() {
+    const previewDiv = document.getElementById("imagePreview");
+    const imageCount = document.getElementById("imageCount");
+    const container = document.getElementById("imagePreviewContainer");
+
+    previewDiv.innerHTML = "";
+    if (imageFiles.length > 0) {
+      container.style.display = "block";
+      imageCount.textContent = `${imageFiles.length} file(s) added`;
+    } else {
+      container.style.display = "none";
+    }
+
+    imageFiles.forEach(img => {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const box = document.createElement("div");
+        box.className = "image-box";
+
+        let previewHTML = "";
+
+        if (img.contentType.startsWith("image/")) {
+          previewHTML = `<img src="${e.target.result}" alt="preview" style="max-width:100%; max-height:200px;">`;
+        } else if (img.contentType === "application/pdf") {
+          previewHTML = `
+            <iframe src="${e.target.result}" width="100%" height="200px"></iframe>
+            <div style="text-align:center;">
+              PDF Preview<br>
+              <a href="${e.target.result}" download="${img.file.name}">Download PDF</a>
+            </div>
+          `;
+        } else if (
+          img.contentType === "text/plain" ||
+          img.contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+          img.contentType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ) {
+          previewHTML = `
+            <div style="text-align:center; padding:10px;">
+              <strong>${img.file.name}</strong><br>
+              <a href="${e.target.result}" download="${img.file.name}">Download File</a>
+            </div>
+          `;
+        } else {
+          previewHTML = `
+            <div style="text-align:center; padding:10px;">
+              <strong>Unknown File Type</strong><br>
+              <a href="${e.target.result}" download="${img.file.name}">Download ${img.file.name}</a>
+            </div>
+          `;
+        }
+
+        box.innerHTML = `
+          ${previewHTML}
+          <input type="text" value="${img.description}" disabled>
+          <button onclick="removeImage(${img.id})">X</button>
+          <div class="success-msg">File added successfully</div>
+        `;
+        previewDiv.appendChild(box);
+      };
+      reader.readAsDataURL(img.file);
+    });
+  }
+
+  function removeImage(id) {
+    const index = imageFiles.findIndex(img => img.id === id);
+    if (index > -1) imageFiles.splice(index, 1);
+    renderImages();
+  }
+
+  document.getElementById("addAssetForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const form = e.target;
+    const submitButton = form.querySelector("button[type='submit']");
+    submitButton.disabled = true;
+    const token = localStorage.getItem("token");
+
+    // Step 1: Collect asset fields
+    const assetData = new FormData();
+    assetData.append("tag_number", form.tag_number.value);
+    assetData.append("description", form.description.value);
+    assetData.append("type_desc", form.type_desc.value);
+    assetData.append("manufacturer_desc", form.manufacturer_desc.value);
+    assetData.append("model_num", form.model_num.value);
+    assetData.append("equ_model_name", form.equ_model_name.value);
+    assetData.append("orig_manufacturer_desc", form.orig_manufacturer_desc.value);
+    assetData.append("serial_num", form.serial_num.value);
+    assetData.append("equ_status_desc", form.equ_status_desc.value);
+    assetData.append("facility_id", form.facility_id.value);
+    assetData.append("udi_code", form.udi_code.value);
+    assetData.append("guid", form.guid.value);
+
+    console.log("Submitting asset:", Object.fromEntries(assetData));
+
+    // Step 2: POST asset data (no files)
+    const res = await fetch("/api/assets", {
+      method: "POST",
+      body: assetData,
+      headers: new Headers({ Authorization: "Bearer " + token })  
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      alert("Failed to create asset: " + error.error);
+      submitButton.disabled = false;
+      return;
+    }
+
+    // Step 3: Upload images separately to /api/asset_images
+    let imagesUploaded = true;
+    if (imageFiles.length > 0) {
+      const uploadForm = new FormData();
+      uploadForm.append("tag_number", form.tag_number.value);
+      uploadForm.append("facility_id", form.facility_id.value);
+      imageFiles.forEach((img) => {
+        uploadForm.append("files", img.file);  
+        uploadForm.append("descriptions[]", img.description);
+        uploadForm.append("content_types[]", img.contentType);
+      });
+
+      console.log("Uploading images:", imageFiles);
+      try{
+      const uploadRes = await fetch("/api/asset_images", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token },
+        body: uploadForm,
+      });
+
+      const data = await uploadRes.json();
+
+      if (!uploadRes.ok) {
+        console.error("Image Upload failed", data);
+        alert("Asset created, but image upload failed: " + data.error);
+        return;
+      }
+      console.log("Image Upload success:",data);
+      }catch(err)
+      {
+        console.error("Image Upload exception:", err);
+        alert("Asset created successfully, but image upload failed due to network/server error.");
+      }
+    }
+    alert("Asset and images uploaded successfully!");
+    form.reset();
+    imageFiles.length = 0;
+    renderImages();
+    submitButton.disabled = false;
+  });
+</script>
 </body>
 </html>

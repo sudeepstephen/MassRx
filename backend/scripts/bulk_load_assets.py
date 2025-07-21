@@ -14,8 +14,8 @@ DB_PARAMS = {
 
 # File and client ID configuration
 PROJECT_DIR = r"/Users/sudeepstephenyalla/Desktop/JobThings/MassTech/MassRx_Current/data"
-EXCEL_FILE = os.path.join(PROJECT_DIR, "assets_NDH.xlsx")
-CLIENT_ID = "umms"
+EXCEL_FILE = os.path.join(PROJECT_DIR, "assets_HQ.xlsx")
+CLIENT_ID = "MATECH"
 def load_excel_to_postgres(file_path):
     try:
         # Read Excel file

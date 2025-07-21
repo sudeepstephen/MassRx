@@ -1,104 +1,143 @@
-<script>
-function authFetch(url, options = {}) {
-    const token = localStorage.getItem('token');
-    const headers = {
-        ...(options.headers || {}),
-        'Authorization': `Bearer ${token}`,
-    };
-
-    // Add Content-Type only for POST/PUT if not already present
-    if ((options.method === 'POST' || options.method === 'PUT') &&
-        !headers['Content-Type']) {
-        headers['Content-Type'] = 'application/json';
-    }
-
-    return fetch(url, {
-        ...options,
-        headers
-    });
-}
-
-</script>
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8" />
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .nav-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin: 20px 0;
+    }
+    .nav-button {
+      display: inline-block;
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      font-size: 16px;
+      transition: background-color 0.2s ease;
+    }
+    .nav-button:hover {
+      background-color: #0056b3;
+    }
+    .dropdown {
+      position: relative;
+      display: inline-block;
+    }
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      background-color: #f1f1f1;
+      min-width: 180px;
+      border-radius: 5px;
+      z-index: 1;
+    }
+    .dropdown-content a {
+      color: black;
+      padding: 8px 12px;
+      text-decoration: none;
+      display: block;
+    }
+    .dropdown-content a:hover {
+      background-color: #ddd;
+    }
+    .dropdown:hover .dropdown-content {
+      display: block;
+    }
+  </style>
 </head>
-<script>
-    async function checkUserRoleAndRender() {
-        const res = await authFetch('/api/me');
-        const user = await res.json();
-        console.log(user);
-        if (user.role === 'director') {
-            const btn = document.createElement('button');
-            btn.textContent = 'Facility Access Management';
-            btn.onclick = () => window.location.href = '/facility_access';
-            document.getElementById('dashboard-buttons').appendChild(btn);
-        }
+<body>
+  <div class="container">
+    <h1>Dashboard</h1>
+    <div class="nav-container" id="dashboard-buttons">
+      <!-- Buttons will be injected here -->
+    </div>
+    <p>
+      <a href="/logout" class="nav-button" style="background-color: #dc3545">Logout</a>
+    </p>
+  </div>
+
+  <script>
+    function authFetch(url, options = {}) {
+      const token = localStorage.getItem("token");
+      const headers = {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${token}`,
+      };
+      if (
+        (options.method === "POST" || options.method === "PUT") &&
+        !headers["Content-Type"]
+      ) {
+        headers["Content-Type"] = "application/json";
+      }
+      return fetch(url, {
+        ...options,
+        headers,
+      });
     }
 
-    document.addEventListener('DOMContentLoaded', checkUserRoleAndRender);
-</script>
+    async function checkUserRoleAndRender() {
+      try {
+        const res = await authFetch("/api/me");
+        const user = await res.json();
+        const role = user.role;
+        const container = document.getElementById("dashboard-buttons");
+        container.innerHTML = "";
 
-<body>
-    <div class="container">
-        <h1>Dashboard</h1>
-        <div class="button-group" id="dashboard-buttons">
-            <button onclick="window.location.href='/view_assets'">Assets</button>
-            <div class="dropdown">
-                <button class="dropbtn">Work Order</button>
-                <div class="dropdown-content">
-                    <a href="/create_work_order">Create New Work Order</a>
-                    <a href="/view_work_orders">View Existing Work Orders</a>
-                    <a href="/purchase_history">Purchase Order History</a>
-                </div>
-            </div>
-            <button onclick="window.location.href='#'" disabled>Parts</button>
-            <button onclick="window.location.href='#'" disabled>Billing</button>
-        </div>
+        if (role === "purchaser") {
+          container.innerHTML = `
+            <a href="/purchase_history" class="nav-button">Purchase Order History</a>
+          `;
+          return;
+        }
 
-        <p><a href="/logout">Logout</a></p>
-    </div>
+        // Add Assets button
+        const assetBtn = document.createElement("a");
+        assetBtn.href = "/view_assets";
+        assetBtn.className = "nav-button";
+        assetBtn.textContent = "Assets";
+        container.appendChild(assetBtn);
+
+        // Work Order dropdown
+        const dropdown = document.createElement("div");
+        dropdown.className = "dropdown";
+
+        const dropBtn = document.createElement("a");
+        dropBtn.href = "#";
+        dropBtn.className = "nav-button";
+        dropBtn.textContent = "Work Order";
+
+        const dropdownContent = document.createElement("div");
+        dropdownContent.className = "dropdown-content";
+        dropdownContent.innerHTML = `
+          <a href="/create_work_order">Create New Work Order</a>
+          <a href="/view_work_orders">View Existing Work Orders</a>
+          <a href="/purchase_history">Purchase Order History</a>
+        `;
+
+        dropdown.appendChild(dropBtn);
+        dropdown.appendChild(dropdownContent);
+        container.appendChild(dropdown);
+
+        // Director-specific button
+        if (role === "director") {
+          const directorBtn = document.createElement("a");
+          directorBtn.href = "/facility_access";
+          directorBtn.className = "nav-button";
+          directorBtn.textContent = "Facility Access Management";
+          container.appendChild(directorBtn);
+        }
+      } catch (error) {
+        console.error("Error loading user role:", error);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", checkUserRoleAndRender);
+  </script>
 </body>
 </html>

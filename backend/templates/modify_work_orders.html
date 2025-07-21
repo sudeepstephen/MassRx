@@ -4,6 +4,82 @@
     <meta charset="UTF-8">
     <title>Modify Work Order</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .btn-update {
+            background-color: #2ecc71;
+            color: white;
+            padding: 12px 24px;
+            font-size: 1.1em;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 700;
+            box-shadow: 0 4px 12px rgba(46, 204, 113, 0.5);
+            transition: background-color 0.3s ease;
+            user-select: none;
+        }
+
+        .btn-update:hover {
+            background-color: #27ae60;
+        }
+
+        .nav-links {
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .nav-button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+            cursor: pointer;
+        }
+
+        .nav-button:hover {
+            background-color: #2980b9;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #fff;
+            padding: 25px 35px;
+            border-radius: 8px;
+            text-align: center;
+            max-width: 500px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+        }
+
+        .modal-content button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: #1e90ff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .modal-content button:hover {
+            background: #155eaa;
+        }
+    </style>
 </head>
 <body>
 <div class="container">
@@ -40,16 +116,13 @@
         <label for="Rqst_cmnt">Requester's Comments:</label>
         <input type="text" id="Rqst_cmnt" name="Rqst_cmnt" value="{{ wo.get('requestercomments', '') }}"><br><br>
 
-
         <label for="parts_needed">Parts Needed:</label>
-            <select id="parts_needed" name="parts_needed">
-            <option value="Not required">Not required</option>
-            <option value="Battery">Battery</option>
-            <option value="Phantom">Phantom</option>
-            </select>
+        <select id="parts_needed" name="parts_needed">
+            <option value="not required">Not required</option>
+        </select>
 
-            <label for="parts_quantity">Quantity:</label>
-            <input type="number" id="parts_quantity" name="parts_quantity" min="0" max="99" value="0"><br><br>
+        <label for="parts_quantity">Quantity:</label>
+        <input type="number" id="parts_quantity" name="parts_quantity" min="0" max="99" value="0"><br><br>
 
         <label for="work_order_status">Work Order Status:</label>
         <select id="work_order_status" name="work_order_status">
@@ -62,10 +135,21 @@
         <label for="work_activity_description">Work Activity Description:</label>
         <textarea id="work_activity_description" name="work_activity_description" rows="4" cols="50">{{ wo['work_activity_description'] }}</textarea><br><br>
 
-        <button type="submit">Update Work Order</button>
+        <button type="submit" class="btn-update">Update Work Order</button>
     </form>
 
-    <p><a href="/view_work_orders">Back to Work Orders</a></p>
+    <div class="nav-links">
+        <a href="/view_work_orders" class="nav-button">Back to Work Orders</a>
+    </div>
+</div>
+
+<!-- Stock Modal -->
+<div id="stockModal" style="display: none;" class="modal-overlay">
+  <div class="modal-content">
+    <h2>Stock Warning</h2>
+    <p id="stockMessage"></p>
+    <button onclick="closeStockModal()">Close</button>
+  </div>
 </div>
 
 <script>
@@ -75,19 +159,23 @@ function authFetch(url, options = {}) {
         ...(options.headers || {}),
         'Authorization': `Bearer ${token}`,
     };
-
     if ((options.method === 'POST' || options.method === 'PUT') && !headers['Content-Type']) {
         headers['Content-Type'] = 'application/json';
     }
-
-    return fetch(url, {
-        ...options,
-        headers
-    });
+    return fetch(url, { ...options, headers });
 }
-</script>
 
-<script>
+function showStockModal(message) {
+    const modal = document.getElementById("stockModal");
+    const messageBox = document.getElementById("stockMessage");
+    messageBox.innerHTML = message.replace(/\n/g, "<br>");
+    modal.style.display = "flex";
+}
+
+function closeStockModal() {
+    document.getElementById("stockModal").style.display = "none";
+}
+
 async function authFetchOptions() {
     try {
         const [types, priorities, depts] = await Promise.all([
@@ -95,11 +183,9 @@ async function authFetchOptions() {
             authFetch('/api/work_order_priorities').then(r => r.json()).then(d => d.work_order_priorities),
             authFetch('/api/departments').then(r => r.json()).then(d => d.departments)
         ]);
-
         populateSelect('wo_type', types.map(t => ({ value: t.wo_type_cd, label: t.wo_type_cd_desc })), '{{ wo["wo_type"] }}');
         populateSelect('wo_priority', priorities.map(p => ({ value: p.wo_priority_cd, label: p.wo_priority_cd_desc })), '{{ wo["wo_priority"] }}');
         populateSelect('assignedtodept', depts.map(d => ({ value: d.dept_cd, label: d.dept_cd_desc })), '{{ wo["assignedtodept"] }}');
-
     } catch (error) {
         console.error('Error fetching options:', error);
     }
@@ -118,7 +204,38 @@ function populateSelect(id, options, selectedValue) {
     });
 }
 
-document.addEventListener('DOMContentLoaded', authFetchOptions);
+async function loadPartsDropdown() {
+    try {
+        const res = await authFetch('/api/parts');
+        const data = await res.json();
+        const select = document.getElementById("parts_needed");
+        select.innerHTML = '';
+
+        const staticOption = document.createElement("option");
+        staticOption.value = "not required";
+        staticOption.textContent = "not required";
+        select.appendChild(staticOption);
+
+        if (data.parts && Array.isArray(data.parts)) {
+            data.parts.forEach(part => {
+                const option = document.createElement("option");
+                option.value = part;
+                option.textContent = part;
+                if (part === "{{ wo['parts_needed'] }}") {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error("Error loading parts:", error);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    authFetchOptions();
+    loadPartsDropdown();
+});
 
 document.getElementById("modifyWorkOrderForm").addEventListener("submit", async function (e) {
     e.preventDefault();
@@ -146,12 +263,10 @@ document.getElementById("modifyWorkOrderForm").addEventListener("submit", async 
 
         const data = await res.json();
 
-        if (!res.ok) {
-            console.error("Server Error:", data.error);
-            console.error("Traceback:", data.traceback);
-            alert("Update failed: " + data.error);
+        if (!res.ok || data.success === false) {
+            showStockModal(data.error || "Something went wrong.");
         } else {
-            alert("Work order updated successfully.");
+            alert("✅ Work order updated successfully.");
             window.location.href = "/view_work_orders";
         }
     } catch (err) {

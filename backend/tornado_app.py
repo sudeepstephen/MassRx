@@ -135,6 +135,8 @@ class Application(tornado.web.Application):
     def __init__(self):
         from core import Database
         self.db = Database()
+        web_root = os.path.join(os.path.dirname(__file__), "..", "flutter_web_build"
+       )
         handlers = [
             (r"/", LoginPageHandler),
             (r"/register", RegisterPageHandler),
@@ -175,8 +177,7 @@ class Application(tornado.web.Application):
             (r"/api/purchase_decline/([0-9]+)", PurchaseDeclineHandler),
             (r"/api/purchase_status/(\d+)", PurchaseStatusUpdateHandler),
             (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static"}),
-            (r"/.*", NotFoundHandler),
-
+            (r"/(.*)", tornado.web.StaticFileHandler, {"path": web_root, "default_filename": "index.html"}),
         ]
         settings = {
             "debug": True,

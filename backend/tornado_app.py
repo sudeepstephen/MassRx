@@ -2,13 +2,14 @@ import tornado.ioloop
 import tornado.web
 import os
 import traceback
+from base_handler import BaseHandler
+import json
 from tornado.options import define, options
 from api import (
     AssetDeleteHandler, AssetDetailsHandler, AssetEditHandler, DeleteAssetFileHandler, GetAssetImagesHandler, MediaFileHandler, PartsHandler, PurchaseApproveHandler, PurchaseDeclineHandler, PurchaseHistoryHandler, PurchaseStatusUpdateHandler, RegisterHandler, LoginHandler, AssetHandler, FacilityHandler, ManagerListHandler, AssignFacilityHandler, 
     RemoveFacilityHandler, CurrentUserHandler, AssetTypeHandler, UploadAssetImagesHandler, WorkOrderHandler, ModifyWorkOrderHandler, 
     WorkOrderTypeHandler, WorkOrderPriorityHandler, DepartmentHandler
 )
-
 
 # Define command-line options
 define("port", default=8888, help="Run on the given port", type=int)
@@ -19,39 +20,6 @@ define("db_user", default="postgres", help="Database user")
 define("db_password", default="Altered_Carb0n!", help="Database password")
 
 # Base Handler for web pages
-class BaseHandler(tornado.web.RequestHandler):
-    def write_error(self, status_code, **kwargs):
-        self.set_header('Content-Type', 'application/json')
-        error_trace = traceback.format_exc()
-        self.finish({
-            "error": self._reason,
-            "traceback": error_trace
-        })
-
-    def initialize(self):
-        self.db = self.application.db
-
-    def get_current_user(self):
-        token = self.get_secure_cookie("token")  
-        if token:
-            token = token.decode()
-        else:
-            auth_header = self.request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                token = auth_header[7:]
-        if not token:
-            return None
-        try:
-            from core import UserService
-            return UserService.verify_jwt(token)
-        except Exception:
-            return None
-
-    async def get_user_context(self, email):
-        from core import UserService
-        service = UserService(self.db)
-        return await tornado.ioloop.IOLoop.current().run_in_executor(None, service.get_user_context, email)
-
 # Web Page Handlers
 class LoginPageHandler(BaseHandler):
     def get(self):

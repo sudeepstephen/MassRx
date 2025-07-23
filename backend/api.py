@@ -4,8 +4,10 @@ import tornado.web
 import tornado.escape
 from core import UserService, AssetService
 from types import SimpleNamespace
+from base_handler import BaseHandler
 
-class BaseApiHandler(tornado.web.RequestHandler):
+
+class BaseApiHandler(BaseHandler):
     def initialize(self):
         self.db = self.application.db
         self.user_service = UserService(self.db)

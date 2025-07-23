@@ -3,6 +3,7 @@ import 'screens/login_htmlstyle.dart';
 import 'screens/register_htmlstyle.dart';
 import 'screens/dashboard_htmlstyle.dart';
 import 'screens/view_assets_htmlstyle.dart';
+import 'screens/add_asset_htmlstyle.dart';
 
 void main() {
   runApp(const MyApp());
@@ -24,6 +25,7 @@ class MyApp extends StatelessWidget {
         '/register_htmlstyle': (context) => const RegisterHtmlStyle(),
         '/login_htmlstyle': (context) => const LoginHtmlStyle(),
         '/view_assets': (context) => const ViewAssetsHtmlStyle(),
+        '/add_asset': (context) => const AddAssetHtmlStyle(),
       },
     );
   }

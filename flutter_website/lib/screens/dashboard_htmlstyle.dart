@@ -30,10 +30,11 @@ class _DashboardHtmlStyleState extends State<DashboardHtmlStyle> {
     }
 
     final res = await http.get(
-      Uri.parse('https://yourdomain.com/api/me'),
+      Uri.parse('http://localhost:8888/api/me'),
       headers: {'Authorization': 'Bearer $token'},
     );
-
+    print('Status: ${res.statusCode}');
+    print('Body: ${res.body}');
     if (res.statusCode == 200) {
       final user = jsonDecode(res.body);
       setState(() {

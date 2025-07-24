@@ -2,7 +2,7 @@ import tornado.ioloop
 import tornado.web
 import os
 import traceback
-from base_handler import BaseHandler
+from base_handler import *
 import json
 from tornado.options import define, options
 from api import (
@@ -106,7 +106,8 @@ class Application(tornado.web.Application):
         web_root = os.path.join(os.path.dirname(__file__), "..", "flutter_web_build"
        )
         handlers = [
-            (r"/", LoginPageHandler),
+            (r"/", LoginHandler),
+            (r"/login", LoginHandler),
             (r"/register", RegisterPageHandler),
             (r"/dashboard", DashboardPageHandler),
             (r"/add_asset", AddAssetPageHandler),
@@ -144,8 +145,8 @@ class Application(tornado.web.Application):
             (r"/api/purchase_approve/([0-9]+)", PurchaseApproveHandler),
             (r"/api/purchase_decline/([0-9]+)", PurchaseDeclineHandler),
             (r"/api/purchase_status/(\d+)", PurchaseStatusUpdateHandler),
-            (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static"}),
-            (r"/(.*)", tornado.web.StaticFileHandler, {"path": web_root, "default_filename": "index.html"}),
+            (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": os.path.join(os.path.dirname(__file__), "static")}),
+            #(r"/(.*)", tornado.web.StaticFileHandler, {"path": web_root, "default_filename": "index.html"}),
         ]
         settings = {
             "debug": True,

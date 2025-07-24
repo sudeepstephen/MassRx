@@ -4,7 +4,7 @@ import tornado.web
 import tornado.escape
 from core import UserService, AssetService
 from types import SimpleNamespace
-from base_handler import BaseHandler
+from base_handler import *
 
 
 class BaseApiHandler(BaseHandler):
@@ -101,6 +101,9 @@ class RegisterHandler(BaseApiHandler):
             self.write({"error": "Invalid JSON"})
 
 class LoginHandler(BaseApiHandler):
+    def get(self):
+        self.render("login.html")
+
     async def post(self):
         try:
             data = tornado.escape.json_decode(self.request.body)
@@ -108,16 +111,25 @@ class LoginHandler(BaseApiHandler):
             password = data.get("password")
 
             result = await self.user_service.login_user(email, password)
+
             if result["success"]:
                 token = result["token"]
                 self.set_secure_cookie("token", token, httponly=True)
-                self.write({"token": token, "message": "Login successful", "redirect": "/dashboard"})
+                self.write({
+                    "token": token,
+                    "message": "Login successful",
+                    "redirect": "/dashboard"
+                })
             else:
                 self.set_status(401)
                 self.write({"error": "Invalid credentials"})
+
         except ValueError:
             self.set_status(400)
             self.write({"error": "Invalid JSON"})
+        except Exception as e:
+            self.set_status(500)
+            self.write({"error": "Internal Server Error", "details": str(e)})
 
 class CurrentUserHandler(BaseApiHandler):
     async def get(self):

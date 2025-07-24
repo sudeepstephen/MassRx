@@ -1,6 +1,7 @@
 import traceback
 import tornado.web
 import tornado.ioloop
+from core import UserService
 
 class BaseHandler(tornado.web.RequestHandler):
     def set_default_headers(self):
@@ -22,24 +23,27 @@ class BaseHandler(tornado.web.RequestHandler):
 
     def initialize(self):
         self.db = self.application.db
+        self.user_service = UserService(self.db)
 
     def get_current_user(self):
-        token = self.get_secure_cookie("token")  
-        if token:
-            token = token.decode()
-        else:
-            auth_header = self.request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                token = auth_header[7:]
+        token = self.get_token_from_request()
         if not token:
             return None
+
         try:
-            from core import UserService
-            return UserService.verify_jwt(token)
+            return self.user_service.verify_jwt(token)
         except Exception:
             return None
 
+    def get_token_from_request(self):
+        auth_header = self.request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            return auth_header[7:]
+
+        cookie_token = self.get_secure_cookie("token")
+        if cookie_token:
+            return cookie_token.decode()
+        return None
+
     async def get_user_context(self, email):
-        from core import UserService
-        service = UserService(self.db)
-        return await tornado.ioloop.IOLoop.current().run_in_executor(None, service.get_user_context, email)
+        return await tornado.ioloop.IOLoop.current().run_in_executor(None, self.user_service.get_user_context, email)

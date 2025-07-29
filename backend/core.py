@@ -69,6 +69,30 @@ class UserService:
     def __init__(self, db):
         self.db = db
 
+    def get_user_by_email(self, email):
+        query = "SELECT email FROM users WHERE email = %s"
+        result = self.db.fetchone(query, (email,))
+        return result
+    
+    async def reset_password(self, email, new_password):
+        conn = self.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                # Check if user exists
+                cur.execute("SELECT 1 FROM users WHERE email = %s", (email,))
+                if cur.fetchone() is None:
+                    return {"success": False, "error": "User not found"}
+
+                hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+                cur.execute(
+                    "UPDATE users SET password = %s WHERE email = %s",
+                    (hashed, email)
+                )
+                conn.commit()
+                return {"success": True}
+        finally:
+            self.db.put_connection(conn)
+
     async def register_user(self, email, client_id, password):
         hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
         conn = self.db.get_connection()
@@ -131,6 +155,7 @@ class UserService:
                 return None
         finally:
             self.db.put_connection(conn)
+    
 
 
 class AssetService:

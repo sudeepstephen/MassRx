@@ -101,9 +101,6 @@ class RegisterHandler(BaseApiHandler):
             self.write({"error": "Invalid JSON"})
 
 class LoginHandler(BaseApiHandler):
-    def get(self):
-        self.render("login.html")
-
     async def post(self):
         try:
             data = tornado.escape.json_decode(self.request.body)
@@ -130,6 +127,30 @@ class LoginHandler(BaseApiHandler):
         except Exception as e:
             self.set_status(500)
             self.write({"error": "Internal Server Error", "details": str(e)})
+
+class ResetPasswordHandler(BaseApiHandler):
+    async def post(self):
+        try:
+            body = tornado.escape.json_decode(self.request.body)
+            email = body.get("email")
+
+            if not email:
+                self.set_status(400)
+                self.write({"error": "Email is required"})
+                return
+
+            user = self.user_service.get_user_by_email(email)
+            if not user:
+                self.set_status(404)
+                self.write({"error": "User not found"})
+                return
+
+            # Simulate sending reset link (add email logic later)
+            self.write({"message": f"Password reset link sent to {email}"})
+
+        except Exception as e:
+            self.set_status(500)
+            self.write({"error": str(e)})
 
 class CurrentUserHandler(BaseApiHandler):
     async def get(self):
@@ -1122,6 +1143,7 @@ class PurchaseStatusUpdateHandler(BaseApiHandler):
         except Exception as e:
             self.set_status(500)
             self.write({"error": str(e)})
+
 
 
 

@@ -8,7 +8,7 @@ from tornado.options import define, options
 from api import (
     AssetDeleteHandler, AssetDetailsHandler, AssetEditHandler, DeleteAssetFileHandler, GetAssetImagesHandler, MediaFileHandler, PartsHandler, PurchaseApproveHandler, PurchaseDeclineHandler, PurchaseHistoryHandler, PurchaseStatusUpdateHandler, RegisterHandler, LoginHandler, AssetHandler, FacilityHandler, ManagerListHandler, AssignFacilityHandler, 
     RemoveFacilityHandler, CurrentUserHandler, AssetTypeHandler, UploadAssetImagesHandler, WorkOrderHandler, ModifyWorkOrderHandler, 
-    WorkOrderTypeHandler, WorkOrderPriorityHandler, DepartmentHandler
+    WorkOrderTypeHandler, WorkOrderPriorityHandler, DepartmentHandler, ResetPasswordHandler
 )
 
 # Define command-line options
@@ -28,6 +28,10 @@ class LoginPageHandler(BaseHandler):
 class RegisterPageHandler(BaseHandler):
     def get(self):
         self.render("register.html")
+
+class ForgotPasswordPageHandler(BaseHandler):
+    def get(self):
+        self.render("forgot_password.html")
 
 class DashboardPageHandler(BaseHandler):
     async def get(self):
@@ -106,9 +110,14 @@ class Application(tornado.web.Application):
         web_root = os.path.join(os.path.dirname(__file__), "..", "flutter_web_build"
        )
         handlers = [
-            (r"/", LoginHandler),
-            (r"/login", LoginHandler),
+            (r"/", LoginPageHandler),
+            (r"/login", tornado.web.RedirectHandler, {"url": "/"}),
             (r"/register", RegisterPageHandler),
+
+            #Forgot Password Routes
+            (r"/forgot_password", ForgotPasswordPageHandler),
+            (r"/api/reset_password", ResetPasswordHandler),
+
             (r"/dashboard", DashboardPageHandler),
             (r"/add_asset", AddAssetPageHandler),
             (r"/view_assets", ViewAssetsPageHandler),
